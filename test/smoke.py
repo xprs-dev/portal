@@ -64,10 +64,19 @@ for board, port in ((False, 8781), (True, 8782)):
     check('hello from the mock' in d, 'a public row from /api/xprs/history is drawn')
     hidden = lambda t: bool(re.search(r'data-tab="%s"[^>]*style="display: none' % t, d))
     link = re.search(r'id="getapp" class="([^"]*)" href="([^"]*)"', d)
+    admin_btn = re.search(r'id="adminbtn" style="([^"]*)"', d)
     if board:
         check(not hidden('devices'), 'every tab shows, as on the boards today')
         check(link is not None and 'hide' in link.group(1), 'no Get the app link')
+        check('id="stcall" title="the station you are using">(X1BOARD)<' in d,
+              'the title names the station, read from /api/status')
+        check(admin_btn is not None and 'none' in admin_btn.group(1),
+              'no Administration on a host that has none')
     else:
+        check('id="stcall" title="the station you are using">(X3MOCK)<' in d,
+              'the title names the station: XPRS (X3MOCK)')
+        check(admin_btn is not None and 'none' not in admin_btn.group(1),
+              'the menu offers Administration')
         check(hidden('devices'), 'a tab the host does not serve is hidden')
         check(not hidden('traffic'), 'a tab it serves stays')
         check(link is not None and link.group(1) == '' and link.group(2) == '/app',

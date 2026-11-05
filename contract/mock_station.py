@@ -23,9 +23,24 @@ ROWS = [{
     'to': '', 'type': 'message', 'sig': 'verified', 'own': False,
     'wire': 't:message f:X1ARKL ts:2026-10-15_09:00:00 scope:local m:hello from the mock',
 }]
-SERVICES = {'ok': True, 'features': {}, 'serve': [],
+SERVICES = {'ok': True, 'station': 'X3MOCK', 'features': {}, 'serve': [],
             'page': {'tabs': ['chat', 'traffic'], 'config': False, 'app': '/app',
-                     'session': True}}
+                     'session': True, 'admin': True}}
+# /api/admin (the rules are WebChatApi's, tested in the core; this answers
+# the shapes). MOCK_REMOTE makes every visitor one from the internet.
+ADMIN = {'call': None}
+SETTINGS = {'local_private': True, 'who_may_post': 'everyone'}
+LOCAL = not os.environ.get('MOCK_REMOTE')
+
+
+def admin_state(token):
+    call = SESSIONS.get(token)
+    you = call is not None and call == ADMIN['call']
+    st = {'ok': True, 'admin': ADMIN['call'], 'you': you, 'local': LOCAL,
+          'claimable': ADMIN['call'] is None and LOCAL}
+    if you:
+        st['settings'] = dict(SETTINGS)
+    return st
 SESSIONS = {}      # token -> callsign
 NONCE = 'c0ffee0123456789'
 ADDRESSED = []     # rows only a session may read (to be set by /__inject)
@@ -52,8 +67,10 @@ def room_of(r):
 
 
 if os.environ.get('MOCK_BOARD'):
-    # What the boards answer today: no `page`, so the page shows everything.
+    # What the boards answer today: no `page`, so the page shows everything,
+    # and no `station`: the page reads the callsign from /api/status.
     del SERVICES['page']
+    del SERVICES['station']
 
 
 class H(BaseHTTPRequestHandler):
@@ -84,6 +101,11 @@ class H(BaseHTTPRequestHandler):
             self._send(200, SERVICES)
         elif u.path == '/api/session':
             self._send(200, {'ok': True, 'nonce': NONCE})
+        elif u.path == '/api/status':
+            self._send(200, {'ok': True, 'callsign': 'X1BOARD', 'board': 'mock',
+                             'uptime_s': 60})
+        elif u.path == '/api/admin':
+            self._send(200, admin_state((parse_qs(u.query).get('session') or [''])[0]))
         elif u.path == '/api/xprs/history':
             q = parse_qs(u.query)
             kinds = (q.get('kind') or [''])[0].split(',')
@@ -122,6 +144,27 @@ class H(BaseHTTPRequestHandler):
             token = 'tok%d' % (len(SESSIONS) + 1)
             SESSIONS[token] = wire.split(' f:')[1].split(' ')[0]
             return self._send(200, {'ok': True, 'session': token})
+        if path == '/api/admin':
+            b = json.loads(body or '{}')
+            call, act = SESSIONS.get(b.get('session')), b.get('action')
+            if call is None:
+                return self._send(403, {'ok': False, 'error': 'prove your key first'})
+            if act == 'claim':
+                if ADMIN['call']:
+                    return self._send(409, {'ok': False, 'error': 'taken'})
+                if not LOCAL:
+                    return self._send(403, {'ok': False, 'error': "claim it from the station's own network"})
+                ADMIN['call'] = call
+            elif act in ('set', 'release'):
+                if call != ADMIN['call']:
+                    return self._send(403, {'ok': False, 'error': 'not the administrator'})
+                if act == 'release':
+                    ADMIN['call'] = None
+                else:
+                    SETTINGS.update(b.get('settings') or {})
+            return self._send(200, admin_state(b.get('session')))
+        if path == '/__admin':
+            return self._send(200, {'admin': ADMIN['call'], 'settings': SETTINGS})
         if path == '/__inject':
             # A row only a session may read: {"wire":..., "from":..., "to":...}
             r = json.loads(body)

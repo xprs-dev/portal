@@ -90,6 +90,23 @@ behind their callsign: `GET /api/session` gives a one-time nonce, the page signs
 that `/api/xprs/history?session=` then honours. Anyone can write any callsign;
 only the key signs.
 
+## The station's name, the menu, and its administrator
+
+The title reads `XPRS (X3PTZM)`: the station's callsign from `/api/services`
+(`station`), or `/api/status` on a host that does not give it there. The menu
+(top right) is grouped into the visitor's identity, this station, and this
+page, and closes on a click or tap outside it, or Escape.
+
+A station that lists `admin` under `page` has an administrator
+(`spec/API-HTTP.md`, `/api/admin`), and the menu offers Administration. With
+none yet, a visitor on the station's own network (its WiFi or LAN) who proved
+their key can claim it: the moment after a board is flashed or a server
+installed. From the internet the claim is not offered. The administrator
+chooses whether the Local room is kept from visitors outside the station's
+network (on by default; such a visitor sees a note in the Local room) and who
+may post from the page (everyone, the station's network, nobody), and can give
+the station up. `test/admin_smoke.py` covers the menu and this view.
+
 ## A NOSTR extension
 
 With a NIP-07 extension (`window.nostr`: nos2x, Alby and the like) the menu offers
@@ -105,11 +122,20 @@ never reaches the page.
 - **Sealing.** `nip04.encrypt` and `decrypt` are the `x:` cipher in another
   wrapping (6.2); `page/xprs_nostr.js` converts, and refuses a signer that
   changed the time or content it was asked to sign.
-- **Remembered.** The choice is kept per origin; the page reconnects to the
-  extension when it loads (the extension may ask again).
+- **Offered first.** When the page finds an extension (it looks for 3 s, the
+  time one takes to inject `window.nostr`) and the visitor has not chosen yet,
+  it asks, with "Use my NOSTR identity" as the default answer. A first-time
+  visitor gets no key until they answer; "Make a new key in this page" (or, for
+  a returning visitor, "Keep <callsign>") keeps the page's own key. With no
+  extension the page makes its key silently, as before.
+- **Remembered.** The answer is kept per origin (`xprs_ext`: `1` the extension,
+  `0` the page's key) and not asked again; the page reconnects to the
+  extension when it loads (the extension may ask again). The menu switches
+  either way at any time.
 
 `test/nostr_test.js` reproduces the specification's worked packet byte for byte
-through a stand-in extension; `test/ext_smoke.py` drives it in a browser and has
+through a stand-in extension; `test/ext_ask_smoke.py` checks the first-visit
+question (asked, remembered, declined, no extension); `test/ext_smoke.py` drives it in a browser and has
 a separate pure-Python BIP-340 verifier (`test/bip340_ref.py`) check what the page
 signed.
 
