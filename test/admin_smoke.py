@@ -106,6 +106,11 @@ async def run(port, remote):
                 check('only from its own network' in text and
                       not await ev("!!document.getElementById('ad-claim')"),
                       'from the internet the claim is not offered')
+                await ev("(switchRoom('alerts'),1)")
+                await asyncio.sleep(2)
+                check('power cut' in (await ev("document.getElementById('msgs').innerText") or '')
+                      and await ev("document.getElementById('alertbtn').style.display") == 'none',
+                      'a visitor sees the alerts feed and, by default, no "Post an alert" in the menu')
                 return
             check('none yet' in text and await ev("!!document.getElementById('ad-claim')"),
                   'a station with no administrator offers the claim')
@@ -121,8 +126,152 @@ async def run(port, remote):
             await asyncio.sleep(2)
             st = json.loads(urllib.request.urlopen(urllib.request.Request(
                 'http://127.0.0.1:%d/__admin' % port, method='POST', data=b'{}')).read())
-            check(st['settings'] == {'local_private': False, 'who_may_post': 'local'},
+            check(st['settings'] == {'local_private': False, 'who_may_post': 'local', 'who_may_alert': 'moderators'},
                   'changed settings reach the station: %s' % st['settings'])
+
+            # Moderation (XPRS.md 10.10).
+            def station():
+                return json.loads(urllib.request.urlopen(urllib.request.Request(
+                    'http://127.0.0.1:%d/__admin' % port, method='POST', data=b'{}')).read())
+            check(station()['roles'].get(me) == 'mod',
+                  'claiming also accepted the moderator role, signed in the page')
+            await ev("(window.confirm=function(){return true},1)")
+            await ev("(showTab('chat'),1)")
+            await asyncio.sleep(3)
+            bubbles = "document.querySelectorAll('#msgs .msg[data-from=\"X1ARKL\"]').length"
+            check(await ev(bubbles) == 1, 'a visitor\'s message is shown')
+            await click('#msgs .msg[data-from="X1ARKL"] .dots')
+            items = await ev("document.getElementById('msgmenu').innerText") or ''
+            check('Delete for everyone' in items and 'away until lifted' in items,
+                  'a moderator\'s message menu offers delete and send away')
+            await ev("(menuAct('mdel',document.querySelector('#msgs .msg[data-from=\"X1ARKL\"]')"
+                     ".getAttribute('data-id'),'X1ARKL'),1)")
+            await asyncio.sleep(2)
+            w = [x for x in json.load(urllib.request.urlopen('http://127.0.0.1:%d/__sent' % port))
+                 if x.startswith('t:moderate')]
+            check(any(' d:X3MOCK ' in x and ' remove:message' in x and ' sig:' in x for x in w),
+                  'the deletion is a signed t:moderate ... r:<id> remove:message to the station')
+            check(await ev(bubbles) == 0, 'and the message leaves the page')
+            await ev("(modSendAway('X1SPAM',0),1)")
+            await asyncio.sleep(2)
+            check(station()['away'] == ['X1SPAM'], 'sending somebody away reaches the station')
+            await ev("(showTab('admin'),1)")
+            await asyncio.sleep(2)
+            text = (await ev("document.getElementById('v-admin').textContent") or '').lower()
+            check('sent away' in text and 'x1spam' in text and 'moderators' in text,
+                  'Administration lists moderators and the people sent away')
+            await ev("(adminDo('lift',{call:'X1SPAM'}),1)")
+            await ev("(document.getElementById('ad-newmod')||{}).value='X1BOBB'")
+            await asyncio.sleep(1)
+            await ev("(document.getElementById('ad-newmod').value='X1BOBB',adminAppoint(),1)")
+            await asyncio.sleep(2)
+            st = station()
+            check(st['away'] == [] and st['roles'].get('X1BOBB') == 'invited',
+                  'the administrator lifts and appoints')
+
+            # Rooms the station hosts (XPRS.md 10.10.1).
+            await ev("(document.getElementById('rn-name').value='Block C',"
+                     "document.getElementById('rn-about').value='residents',"
+                     "document.getElementById('rn-post').value='members',roomCreate(),1)")
+            await asyncio.sleep(3)
+            st = station()
+            check(list(st['rooms']) == ['X5R001'] and st['rooms']['X5R001']['posting'] == 'members',
+                  'the administrator creates a room: %s' % st['rooms'])
+            check(st['room_roles'].get('X5R001 ' + me) == 'mod',
+                  'and accepted its moderator role, signed in the page')
+            side = await ev("document.getElementById('side').textContent") or ''
+            check('Station rooms' in side and 'Block C' in side, 'the room is in the sidebar')
+            await ev("(roomDo===roomDo&&(document.getElementById('rm-X5R001').value='X1BOBB'),roomDo('add','X5R001'),1)")
+            await asyncio.sleep(2)
+            check(station()['room_roles'].get('X5R001 X1BOBB') == 'invited', 'a member is invited')
+            await ev("(showTab('chat'),switchRoom('g:X5R001'),1)")
+            await asyncio.sleep(1)
+            await ev("(document.getElementById('txt').value='hello room',sendMsg(),1)")
+            await asyncio.sleep(2)
+            sent = json.load(urllib.request.urlopen('http://127.0.0.1:%d/__sent' % port))
+            check(any(x.startswith('t:message') and ' d:X5R001 ' in x and 'hello room' in x for x in sent),
+                  'a message in the room is addressed to it (d:X5R001)')
+            check(await ev("document.querySelectorAll('#msgs .msg').length") == 1,
+                  'and is shown in the room')
+            await ev("(roomPost({action:'update',call:'X5R001',visibility:'private'}),1)")
+            await asyncio.sleep(2)
+            check(station()['rooms']['X5R001']['visibility'] == 'private', 'the room can be made private')
+
+            # Alerts (XPRS.md 10.10.2).
+            await ev("(alertsSeen={},pollAlerts(),1)")
+            await asyncio.sleep(2)
+            label = await ev("document.getElementById('alertsroom').textContent") or ''
+            check('(1)' in label, 'the Feed entry says Alerts (1) while an alert is unread: %r' % label)
+            check(await ev("document.querySelectorAll('#tabs [data-tab=alerts]').length") == 0,
+                  'and there is no Alerts tab')
+            await ev("(switchRoom('alerts'),1)")
+            await asyncio.sleep(2)
+            text = await ev("document.getElementById('msgs').innerText") or ''
+            check('power cut' in text, 'opening it lists the active alert in the conversation column')
+            check('(1)' not in (await ev("document.getElementById('alertsroom').textContent") or ''),
+                  'and clears the count')
+            check(await ev("document.getElementById('txt').disabled"), 'the composer is off in the feed')
+            check(await ev("document.getElementById('alertbtn').style.display") != 'none',
+                  'a moderator has "Post an alert" in the menu')
+            await ev("(showTab('alerts'),1)")
+            await asyncio.sleep(2)
+            check(await ev("!!document.getElementById('al-text')"), 'the window behind it has the form')
+            await ev("(document.getElementById('al-kind').value='road',"
+                     "document.getElementById('al-text').value='bridge closed',postAlert(),1)")
+            await asyncio.sleep(3)
+            sent = json.load(urllib.request.urlopen('http://127.0.0.1:%d/__sent' % port))
+            mine = [x for x in sent if x.startswith('t:warning') and 'bridge closed' in x]
+            check(len(mine) == 1 and ' kind:road ' in mine[0] and ' sev:' in mine[0] and ' until:' in mine[0]
+                  and ' sig:' in mine[0], 'a posted alert is a signed t:warning with kind, sev and until')
+            text = await ev("document.getElementById('v-alerts').innerText") or ''
+            check('bridge closed' in text and 'Withdraw' in text, 'it is listed, with Withdraw on our own')
+            await ev("(withdrawAlert(document.querySelector('.alert[data-id] button')"
+                     "&&[].slice.call(document.querySelectorAll('.alert')).filter(function(a){"
+                     "return a.innerText.indexOf('bridge closed')>=0})[0].getAttribute('data-id'),'warning'),1)")
+            await asyncio.sleep(3)
+            sent = json.load(urllib.request.urlopen('http://127.0.0.1:%d/__sent' % port))
+            check(any(x.startswith('t:warning') and ' remove:warning' in x for x in sent),
+                  'withdrawing sends r:<id> remove:warning')
+
+            # Private messages: sealed by default, clear text on request (6.2, 6.4).
+            await ev("(showTab('admin'),1)")
+            await asyncio.sleep(2)
+            await ev("(document.querySelector('#v-admin .call.link').scrollIntoView({block:'center'}),1)")
+            await asyncio.sleep(0.5)
+            await click('#v-admin .call.link')
+            await asyncio.sleep(1)
+            check((await ev("curRoom") or '').startswith('dm:') and await ev("tab") == 'chat',
+                  'a callsign in Administration opens a private message: %s' % await ev("curRoom"))
+            peer_npub = await ev("npubEncode(pubkeyX(n2b(0x1234567890abcdef1234567890abcdefn,32)))")
+            peer = await ev("callsignFromNpub(%s)" % json.dumps(peer_npub))
+            await ev("(switchRoom('dmnew'),1)")
+            await asyncio.sleep(1)
+            check(await ev("!!document.getElementById('dm-to')"), 'New private message asks for a callsign or npub')
+            await ev("(document.getElementById('dm-to').value=%s,startDm(),1)" % json.dumps(peer_npub))
+            await asyncio.sleep(1)
+            check(await ev("curRoom") == 'dm:' + peer, 'an npub opens the conversation with its callsign %s' % peer)
+            await ev("(document.getElementById('txt').value='a sealed hello',sendMsg(),1)")
+            await asyncio.sleep(2)
+            sent = json.load(urllib.request.urlopen('http://127.0.0.1:%d/__sent' % port))
+            dm = [x for x in sent if (' d:%s ' % peer) in x]
+            check(len(dm) == 1 and ' x:' in dm[0] and ' m:' not in dm[0],
+                  'sealed by default: x:, no words in the clear')
+            await ev("(toggleSeal(),1)")
+            await asyncio.sleep(1)
+            check('Clear text' in (await ev("document.getElementById('msgs').innerText") or ''),
+                  'the lock switches the conversation to clear text, and says so')
+            await ev("(document.getElementById('txt').value='73 de radio',sendMsg(),1)")
+            await asyncio.sleep(2)
+            sent = json.load(urllib.request.urlopen('http://127.0.0.1:%d/__sent' % port))
+            dm = [x for x in sent if (' d:%s ' % peer) in x and '73 de radio' in x]
+            check(len(dm) == 1 and ' m:73 de radio' in dm[0] and ' x:' not in dm[0],
+                  'clear text: m:, as amateur radio needs')
+            await ev("(toggleSeal(),window.__asked=0,window.confirm=function(){window.__asked++;return false},1)")
+            await ev("(openDm('X1NOKY'),document.getElementById('txt').value='who?',sendMsg(),1)")
+            await asyncio.sleep(2)
+            sent = json.load(urllib.request.urlopen('http://127.0.0.1:%d/__sent' % port))
+            check(await ev("window.__asked") == 1 and not any(' d:X1NOKY ' in x for x in sent),
+                  'with no key known it asks before sending in clear, and a no sends nothing')
     finally:
         chrome.terminate()
         mock.terminate()

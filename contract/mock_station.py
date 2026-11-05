@@ -24,22 +24,61 @@ ROWS = [{
     'wire': 't:message f:X1ARKL ts:2026-10-15_09:00:00 scope:local m:hello from the mock',
 }]
 SERVICES = {'ok': True, 'station': 'X3MOCK', 'features': {}, 'serve': [],
-            'page': {'tabs': ['chat', 'traffic'], 'config': False, 'app': '/app',
-                     'session': True, 'admin': True}}
+            'page': {'tabs': ['chat', 'traffic', 'alerts'], 'config': False, 'app': '/app',
+                     'session': True, 'admin': True, 'moderation': True,
+                     'rooms': True, 'alerts': 'moderators'}}
+# An active alert the station holds (XPRS.md 10.10.2).
+ROWS.append({
+    'id': '3c7e21', 'ts': int(time.time()) - 30, 'bearer': 'lora', 'rssi': -80,
+    'from': 'X3RLY7', 'to': '', 'type': 'warning', 'sig': 'verified', 'own': False,
+    'wire': 't:warning f:X3RLY7 kind:outage sev:watch ts:2026-11-06_18:00:00 m:power cut in block C',
+})
+# Rooms the station hosts (10.10.1): call -> meta; the roster is ROOM_ROLES.
+ROOMS = {}
+ROOM_ROLES = {}   # (call, member) -> 'invited' | 'member' | 'mod'
+ROOM_N = [0]
+
+
+def room_json(call, who, admin):
+    m = ROOMS[call]
+    role = ROOM_ROLES.get((call, who), 'none')
+    members_only = m['visibility'] == 'private' or m['posting'] != 'anyone'
+    j = {'call': call, 'name': m['name'], 'about': m.get('about', ''),
+         'visibility': m['visibility'], 'posting': m['posting'], 'role': role,
+         'can_post': bool(who) and (not members_only or role in ('member', 'mod'))}
+    if role == 'invited':
+        j['offer'] = 'b1b1b1'
+    if admin or role == 'mod':
+        for r, k in (('member', 'members'), ('mod', 'moderators'), ('invited', 'invited')):
+            j[k] = sorted(c for (g, c), v in ROOM_ROLES.items() if g == call and v == r)
+    return j
 # /api/admin (the rules are WebChatApi's, tested in the core; this answers
 # the shapes). MOCK_REMOTE makes every visitor one from the internet.
 ADMIN = {'call': None}
-SETTINGS = {'local_private': True, 'who_may_post': 'everyone'}
+SETTINGS = {'local_private': True, 'who_may_post': 'everyone', 'who_may_alert': 'moderators'}
 LOCAL = not os.environ.get('MOCK_REMOTE')
+
+
+# XPRS.md 10.10, the shapes only (the rules are WebChatApi's): callsign ->
+# 'invited' | 'mod'; removed message ids; callsigns sent away.
+ROLES, REMOVED, AWAY = {}, [], []
+OFFER = 'a0a0a0'
 
 
 def admin_state(token):
     call = SESSIONS.get(token)
     you = call is not None and call == ADMIN['call']
     st = {'ok': True, 'admin': ADMIN['call'], 'you': you, 'local': LOCAL,
-          'claimable': ADMIN['call'] is None and LOCAL}
+          'claimable': ADMIN['call'] is None and LOCAL,
+          'station': 'X3MOCK', 'role': ROLES.get(call, 'none')}
+    if st['role'] == 'invited':
+        st['offer'] = OFFER
     if you:
         st['settings'] = dict(SETTINGS)
+    if you or st['role'] == 'mod':
+        st['moderators'] = sorted(c for c, r in ROLES.items() if r == 'mod')
+        st['invited'] = sorted(c for c, r in ROLES.items() if r == 'invited')
+        st['away'] = [{'call': c} for c in AWAY]
     return st
 SESSIONS = {}      # token -> callsign
 NONCE = 'c0ffee0123456789'
@@ -106,6 +145,12 @@ class H(BaseHTTPRequestHandler):
                              'uptime_s': 60})
         elif u.path == '/api/admin':
             self._send(200, admin_state((parse_qs(u.query).get('session') or [''])[0]))
+        elif u.path == '/api/rooms':
+            tok = (parse_qs(u.query).get('session') or [''])[0]
+            who, admin = SESSIONS.get(tok), SESSIONS.get(tok) == ADMIN['call']
+            self._send(200, {'ok': True, 'rooms': [
+                room_json(c, who, admin) for c in sorted(ROOMS, key=lambda c: ROOMS[c]['name'])
+                if admin or ROOMS[c]['visibility'] == 'public' or (c, who) in ROOM_ROLES]})
         elif u.path == '/api/xprs/history':
             q = parse_qs(u.query)
             kinds = (q.get('kind') or [''])[0].split(',')
@@ -117,12 +162,21 @@ class H(BaseHTTPRequestHandler):
             if call:
                 rows = [r for r in rows if r['from'] == call]
             room = (q.get('room') or [''])[0]
-            if room:
+            if room in ROOMS:
+                tok = (q.get('session') or [''])[0]
+                who = SESSIONS.get(tok)
+                if ROOMS[room]['visibility'] == 'private' and who != ADMIN['call'] \
+                        and (room, who) not in ROOM_ROLES:
+                    return self._send(404, {'ok': False, 'error': 'no such room'})
+                rows = [r for r in rows if r['to'] == room]
+            elif room:
                 rows = [r for r in rows if room_of(r) == room]
+            rows = [r for r in rows if r.get('id') not in REMOVED and r['from'] not in AWAY]
             rows.sort(key=lambda r: -r['ts'])
             rows = rows[:int((q.get('limit') or ['30'])[0])]
             self._send(200, {'ok': True, 'count': len(rows), 'held': len(ROWS),
-                             'time': 'synced', 'rows': rows})
+                             'time': 'synced', 'rows': rows,
+                             'moderation': {'removed': REMOVED, 'away': AWAY}})
         elif u.path == '/__sent':
             self._send(200, SENT)
         else:
@@ -155,6 +209,17 @@ class H(BaseHTTPRequestHandler):
                 if not LOCAL:
                     return self._send(403, {'ok': False, 'error': "claim it from the station's own network"})
                 ADMIN['call'] = call
+                ROLES[call] = 'invited'
+            elif act in ('appoint', 'dismiss', 'lift'):
+                if call != ADMIN['call']:
+                    return self._send(403, {'ok': False, 'error': 'not the administrator'})
+                who = b.get('call', '')
+                if act == 'appoint':
+                    ROLES[who] = 'invited'
+                else:
+                    ROLES.pop(who, None) if act == 'dismiss' else None
+                    if act == 'lift' and who in AWAY:
+                        AWAY.remove(who)
             elif act in ('set', 'release'):
                 if call != ADMIN['call']:
                     return self._send(403, {'ok': False, 'error': 'not the administrator'})
@@ -163,8 +228,42 @@ class H(BaseHTTPRequestHandler):
                 else:
                     SETTINGS.update(b.get('settings') or {})
             return self._send(200, admin_state(b.get('session')))
+        if path == '/api/rooms':
+            b = json.loads(body or '{}')
+            if SESSIONS.get(b.get('session')) != ADMIN['call']:
+                return self._send(403, {'ok': False, 'error': "only the station's administrator manages rooms"})
+            act, call = b.get('action'), b.get('call', '')
+            if act == 'create':
+                ROOM_N[0] += 1
+                call = 'X5R%03X' % ROOM_N[0]
+                vis = b.get('visibility', 'public')
+                ROOMS[call] = {'name': b['name'], 'about': b.get('about', ''), 'visibility': vis,
+                               'posting': 'members' if vis == 'private' else b.get('posting', 'anyone')}
+                ROOM_ROLES[(call, ADMIN['call'])] = 'invited'
+            elif call not in ROOMS:
+                return self._send(404, {'ok': False, 'error': 'no such room'})
+            elif act == 'update':
+                for k in ('name', 'about', 'visibility', 'posting'):
+                    if k in b:
+                        ROOMS[call][k] = b[k]
+                if ROOMS[call]['visibility'] == 'private':
+                    ROOMS[call]['posting'] = 'members'
+            elif act == 'close':
+                del ROOMS[call]
+            elif act in ('add', 'appoint', 'remove'):
+                m = b.get('member', '')
+                if act == 'remove':
+                    ROOM_ROLES.pop((call, m), None)
+                else:
+                    ROOM_ROLES[(call, m)] = 'invited'
+            who = SESSIONS.get(b.get('session'))
+            return self._send(200, {'ok': True, 'room': call, 'rooms': [
+                room_json(c, who, True) for c in ROOMS]})
         if path == '/__admin':
-            return self._send(200, {'admin': ADMIN['call'], 'settings': SETTINGS})
+            return self._send(200, {'admin': ADMIN['call'], 'settings': SETTINGS,
+                                    'roles': ROLES, 'removed': REMOVED, 'away': AWAY,
+                                    'rooms': ROOMS,
+                                    'room_roles': {'%s %s' % k: v for k, v in ROOM_ROLES.items()}})
         if path == '/__inject':
             # A row only a session may read: {"wire":..., "from":..., "to":...}
             r = json.loads(body)
@@ -183,6 +282,49 @@ class H(BaseHTTPRequestHandler):
                 wire = body
             if not wire.startswith('t:') or ' f:' not in wire or len(wire) > 250:
                 return self._send(400, {'ok': False, 'error': 'malformed'})
+            if wire.startswith('t:moderate ') and ' d:X5' in wire:
+                f = wire.split(' f:')[1].split(' ')[0]
+                g = wire.split(' d:')[1].split(' ')[0]
+                if ' accept:' in wire and ROOM_ROLES.get((g, f)) == 'invited':
+                    ROOM_ROLES[(g, f)] = 'mod' if ' accept:mod' in wire else 'member'
+                elif ROOM_ROLES.get((g, f)) != 'mod':
+                    return self._send(403, {'ok': False, 'error': 'not a moderator here'})
+                SENT.append(wire)
+                return self._send(200, {'ok': True, 'id': 'abc123', 'wire': wire})
+            if wire.startswith('t:warning ') or wire.startswith('t:info '):
+                f = wire.split(' f:')[1].split(' ')[0]
+                if ' remove:' not in wire and SETTINGS['who_may_alert'] != 'everyone' \
+                        and f != ADMIN['call'] and ROLES.get(f) != 'mod':
+                    return self._send(403, {'ok': False, 'error': 'on this station only moderators post alerts'})
+                SENT.append(wire)
+                ROWS.append({'id': 'a%05x' % len(SENT), 'ts': int(time.time()), 'bearer': 'lan',
+                             'rssi': 0, 'from': f, 'to': '', 'type': wire[2:wire.index(' ')],
+                             'sig': 'verified', 'own': False, 'wire': wire})
+                return self._send(200, {'ok': True, 'id': 'a%05x' % len(SENT), 'wire': wire})
+            if ' d:X5' in wire:
+                f = wire.split(' f:')[1].split(' ')[0]
+                g = wire.split(' d:')[1].split(' ')[0]
+                m = ROOMS.get(g)
+                if m is None:
+                    return self._send(404, {'ok': False, 'error': 'no such room'})
+                if (m['visibility'] == 'private' or m['posting'] != 'anyone') \
+                        and ROOM_ROLES.get((g, f)) not in ('member', 'mod'):
+                    return self._send(403, {'ok': False, 'error': 'only members post in this room'})
+                SENT.append(wire)
+                ROWS.append({'id': 'r%05x' % len(SENT), 'ts': int(time.time()), 'bearer': 'web',
+                             'rssi': 0, 'from': f, 'to': g, 'type': 'message',
+                             'sig': 'verified', 'own': False, 'wire': wire})
+                return self._send(200, {'ok': True, 'id': 'r%05x' % len(SENT), 'wire': wire})
+            if wire.startswith('t:moderate '):
+                f = wire.split(' f:')[1].split(' ')[0]
+                if ' accept:mod' in wire and ROLES.get(f) == 'invited':
+                    ROLES[f] = 'mod'
+                elif ROLES.get(f) != 'mod':
+                    return self._send(403, {'ok': False, 'error': 'not a moderator here'})
+                elif ' remove:message' in wire:
+                    REMOVED.append(wire.split(' r:')[1].split(' ')[0])
+                elif ' revoke:' in wire:
+                    AWAY.append(wire.split(' revoke:')[1].split(' ')[0])
             SENT.append(wire)
             return self._send(200, {'ok': True, 'id': 'abc123', 'wire': wire})
         self._send(404, {'ok': False, 'error': 'not here'})

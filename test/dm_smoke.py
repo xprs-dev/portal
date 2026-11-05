@@ -78,10 +78,20 @@ async def main():
             await ev("(load(),1)")
             await asyncio.sleep(2)
             check('X1PEER' in (await ev("Object.keys(dmPeers).join()") or ''), 'a room for the peer appears')
+            side = await ev("document.getElementById('side').textContent") or ''
+            check('X1PEER (1)' in side, 'the left column counts the unread message: %r' % side[-40:])
+            check(await ev("document.querySelector('#side .room[data-r=\"dm:X1PEER\"]').className.indexOf('unread')>=0"),
+                  'and marks the conversation unread')
             await ev("(openDm('X1PEER'),1)")
             await asyncio.sleep(2)
             text = await ev("document.getElementById('msgs').innerText") or ''
             check('a secret from the peer' in text, 'the sealed message is opened and shown')
+            side = await ev("document.getElementById('side').textContent") or ''
+            check('X1PEER (1)' not in side and 'X1PEER' in side, 'opening it clears the count')
+            await ev("(load(),1)")
+            await asyncio.sleep(2)
+            check('(1)' not in (await ev("document.querySelector('#side .room[data-r=\"dm:X1PEER\"]').textContent") or ''),
+                  'and the next poll does not count it again')
             check(await ev("document.getElementById('msgs').innerHTML.indexOf('>sealed<')>=0"),
                   'and marked sealed')
             await ev("(document.getElementById('txt').value='reply sealed',sendMsg(),1)")

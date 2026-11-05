@@ -105,7 +105,53 @@ installed. From the internet the claim is not offered. The administrator
 chooses whether the Local room is kept from visitors outside the station's
 network (on by default; such a visitor sees a note in the Local room) and who
 may post from the page (everyone, the station's network, nobody), and can give
-the station up. `test/admin_smoke.py` covers the menu and this view.
+the station up.
+
+Where `page.moderation` is set the station's rooms have moderators (XPRS.md
+10.10). The administrator appoints them (by callsign), dismisses them, and lifts
+a removal; an appointed person accepts in Administration, and the
+administrator's own acceptance is signed as they claim. A moderator's message
+menu offers "Delete for everyone" (`t:moderate ... r:<id> remove:message`) and
+"Send <callsign> away" for an hour, a day or until lifted (`revoke:<call>
+[until:]`), signed in the page and posted like any wire; Administration lists
+the moderators and the people sent away. What the station reports removed
+(`moderation` on the history answer) leaves every page showing it.
+`test/admin_smoke.py` covers the menu, this view and moderation.
+
+Where `page.rooms` is set the station hosts closed groups of its own (XPRS.md
+10.10.1, `/api/rooms`): the administrator creates them in Administration
+(name, about, public or private, anyone or members posting), adds members,
+appoints moderators and closes them; the station signs those acts as the room.
+They appear in the sidebar under "Station rooms" (a lock marks a private one),
+an invited visitor sees a Join button in the room and accepts with their own
+signature, and a message there is `d:<room>`, kept on the station and never
+aired. Moderators of a room have the same message menu as the station's.
+
+Alerts are a feed entry on the left, under Social: the active `t:warning` and
+`t:info` the station holds (XPRS.md 24, 25; active until `until:`, or a day,
+and not withdrawn), listed in the conversation column. The entry reads
+"Alerts (n)" while there are alerts this browser has not looked at, polled
+every thirty seconds. Posting one is "Post an alert" in the menu (top right),
+offered only to whom the station lets post (`page.alerts`, XPRS.md 10.10.2):
+the moderators and the administrator, or everyone; the form composes a signed
+warning (kind, severity, how long) or notice, and the author may withdraw
+their own.
+
+## Private messages
+
+"Private message" (the menu, or the People heading on the left) starts one
+with a callsign active on the chat or with an npub, which is the key itself
+(its X1 callsign derives from it). A conversation is sealed to the peer's key
+by default (`x:`, XPRS.md 6.2); the lock beside the message box switches that
+conversation to clear text (`m:`), the only form amateur bands allow (6.4),
+and the room says which it is. With no key heard for a callsign the page asks
+before sending in the clear; it never does so silently. Callsigns shown in
+Administration and on alerts open a private message.
+
+Each person on the left shows how many of their messages are unread,
+"X1ABCD (2)", in bold and sorted first; opening the conversation clears it.
+What was read is remembered per origin (`xprs_dm_read`), and a browser that
+never read anybody counts from its first visit, not the whole archive.
 
 ## A NOSTR extension
 
