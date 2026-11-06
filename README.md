@@ -14,6 +14,12 @@ and airs it, and never sees a private key.
 
 ## Layout
 
+On a narrow screen (a phone held upright) the room list is a drawer: a bar
+above the conversation names the room, with a count of the people who wrote
+and were not read yet, and opens the same grouped list over the page, where
+a hundred private conversations scroll like anywhere else. A tap on a room
+closes it. Wider than 640px the list is the column on the left.
+
 - `page/` the source: `chat_page.html`, `xprs_crypto.js`, `xprs_seal.js`, `xprs_nostr.js`, `logo-font.css`.
 - `tool/build.py` merges them into one HTML file, gzipped, and optionally the C
   array the firmware embeds. `tool/test_crypto.sh` checks the signing against
@@ -172,10 +178,11 @@ the names mean, so a new one costs it nothing. The page uses three:
   `--on-accent`, `--own`, `--banner`, `--radius` and a few more at the top of
   the stylesheet), so a colour scheme is one block. Six themes to start from
   (`THEMES`: Orange retro, Clean dark, Cyberpunk, Rose, Paper, Forest) are
-  chips above the stylesheet: picking one previews it in the page and fills
-  the stylesheet with the theme's whole block, every property named and
-  the default one annotated, to edit before Save, which stores it like any
-  hand-written one, so a theme is nothing to the station. Administration
+  chips above the stylesheet: picking one is the choice itself, applied and
+  saved for every visitor at once (a hand-written stylesheet is replaced),
+  and the theme's whole block fills the stylesheet below, every property
+  named and the default one annotated, to edit and Save again; so a theme
+  is nothing to the station. Administration
   redraws itself every minute, but not while a field holds unsaved text
   (`adminDirty`). `test/theme_shots.py` screenshots each theme.
 

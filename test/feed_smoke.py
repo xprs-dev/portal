@@ -51,6 +51,28 @@ try:
     c.eval("document.querySelector('.header .logo').click()")
     check(c.eval("tab==='chat'&&curRoom==='local'"), 'the logo goes back to the chat')
 
+    print('a narrow screen: the room drawer')
+    c.send('Emulation.setDeviceMetricsOverride', {'width': 360, 'height': 740, 'deviceScaleFactor': 2, 'mobile': True})
+    time.sleep(0.5)
+    check(c.eval("getComputedStyle(document.getElementById('roombar')).display==='flex'&&document.getElementById('rb-name').textContent==='Local'"),
+          'a bar names the room')
+    check(c.eval("document.getElementById('side').getBoundingClientRect().right<=0"), 'the room list is off screen')
+    c.eval("for(var i=0;i<40;i++){dmPeers['X1P'+(100+i)]=true;}dmUnread['X1P105']=2;renderSide()")
+    c.eval("toggleSide()")
+    time.sleep(0.4)
+    check(c.eval("document.getElementById('side').classList.contains('open')&&document.getElementById('side').getBoundingClientRect().left===0"),
+          'the bar opens it as a drawer')
+    check(c.eval("document.querySelectorAll('#side .room').length>45&&document.getElementById('side').scrollHeight>document.getElementById('side').clientHeight"),
+          'forty conversations scroll in it')
+    check(c.eval("document.getElementById('rb-cnt').textContent") == '1', 'the bar counts who wrote and was not read')
+    c.eval("document.querySelector('#side .room[data-r=\"dm:X1P105\"]').click()")
+    time.sleep(0.4)
+    check(c.eval("curRoom==='dm:X1P105'&&!document.getElementById('side').classList.contains('open')&&document.getElementById('rb-name').textContent==='X1P105'"),
+          'a tap opens the conversation and closes the drawer')
+    c.eval("switchRoom('local');for(var k in dmPeers)delete dmPeers[k];for(var k in dmUnread)delete dmUnread[k];renderSide()")
+    c.send('Emulation.setDeviceMetricsOverride', {'width': 1100, 'height': 720, 'deviceScaleFactor': 1, 'mobile': False})
+    time.sleep(0.5)
+
     print('the Blog feed')
     c.eval("switchRoom('blog')")
     check(c.eval(bar) == 'none', 'no composer bar on the Blog')
@@ -108,11 +130,11 @@ try:
     c.eval("pickTheme(0)")
     check(c.eval("document.getElementById('ad-css').value.indexOf('--accent:#ffa86a')>0"), 'the default theme lists its whole palette to edit')
     c.eval("pickTheme(2)")
-    check(c.eval("document.getElementById('ad-css').value===prettyCss(THEMES[2].css)&&document.getElementById('st-css').textContent===THEMES[2].css&&document.querySelector('#themes .theme.on').textContent==='Cyberpunk'"),
-          'picking one previews it and fills the stylesheet, the chip lit')
-    c.eval("adminSet({page_css:document.getElementById('ad-css').value})")
+    check(c.eval("document.getElementById('ad-css').value===prettyCss(THEMES[2].css)&&document.getElementById('st-css').textContent===prettyCss(THEMES[2].css)&&document.querySelector('#themes .theme.on').textContent==='Cyberpunk'"),
+          'picking one applies it and fills the stylesheet, the chip lit')
+    time.sleep(1)
     c.load('http://127.0.0.1:%d/' % PORT)
-    check(c.wait("document.getElementById('st-css').textContent===prettyCss(THEMES[2].css)", 5), 'saved, a visitor gets the theme')
+    check(c.wait("document.getElementById('st-css').textContent===prettyCss(THEMES[2].css)", 5), 'saved by the pick alone: a visitor gets the theme')
     c.eval("adminSet({page_css:':root{--accent:#6fc3ff}'})")
     c.eval("showTab('chat')")
     c.send('Page.navigate', {'url': 'http://127.0.0.1:%d/' % PORT})

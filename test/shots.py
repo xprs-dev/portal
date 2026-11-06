@@ -53,6 +53,11 @@ try:
         c.load('http://127.0.0.1:%d/' % PORT)
         c.wait("canSign()", 10)
         shot(c, mode + '_chat')
+        if mode != 'desktop':
+            c.eval("for(var i=0;i<40;i++){dmPeers['X1P'+(100+i)]=true;}dmUnread['X1P105']=2;dmUnread['X1P121']=1;renderSide();toggleSide()")
+            time.sleep(0.5)
+            shot(c, mode + '_drawer')
+            c.eval("closeSide();for(var k in dmPeers)delete dmPeers[k];for(var k in dmUnread)delete dmUnread[k];renderSide()")
 
         c.eval("showTab('admin')")
         if c.wait("!!document.getElementById('ad-claim')", 5):
