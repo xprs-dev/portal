@@ -10,6 +10,7 @@ can be tested without a board and without a phone.
 """
 import gzip
 import json
+import re
 import os
 import sys
 import time
@@ -114,7 +115,9 @@ def forum_topics(room):
 # /api/admin (the rules are WebChatApi's, tested in the core; this answers
 # the shapes). MOCK_REMOTE makes every visitor one from the internet.
 ADMIN = {'call': None}
-SETTINGS = {'local_private': True, 'who_may_post': 'everyone', 'who_may_alert': 'moderators'}
+SETTINGS = {'local_private': True, 'who_may_post': 'everyone', 'who_may_alert': 'moderators',
+            'reach_alerts': 'regional', 'reach_posts': 'regional', 'reach_chat': 'global',
+            'follow': '', 'peers_mode': 'open', 'peers': ''}
 LOCAL = not os.environ.get('MOCK_REMOTE')
 
 
@@ -308,6 +311,17 @@ class H(BaseHTTPRequestHandler):
                     ADMIN['call'] = None
                 else:
                     for k, v in (b.get('settings') or {}).items():
+                        # The same shapes the station checks (API-HTTP.md).
+                        if k.startswith('reach_') and v not in ('local', 'regional', 'global'):
+                            return self._send(400, {'ok': False, 'error': '%s must be local, regional or global' % k})
+                        if k == 'peers_mode' and v not in ('open', 'named'):
+                            return self._send(400, {'ok': False, 'error': 'peers_mode must be open or named'})
+                        if k in ('peers', 'follow'):
+                            calls = [c for c in re.split(r'[\s,]+', str(v).upper()) if c]
+                            for c in calls:
+                                if not (re.match(r'^X[1-5][A-Z0-9]{2,5}$', c) or (k == 'follow' and re.match(r'^NPUB1[A-Z0-9]{58}$', c))):
+                                    return self._send(400, {'ok': False, 'error': '%s: %s is not a callsign' % (k, c)})
+                            v = ' '.join(c.lower() if c.startswith('NPUB1') else c for c in calls)
                         if k.startswith('page_') and v == '':
                             SETTINGS.pop(k, None)   # emptied: gone
                         else:

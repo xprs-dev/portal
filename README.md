@@ -160,6 +160,17 @@ signature of its own and the page joins the set and judges the whole. A whole
 post filed by a station that joined the parts itself outranks the parts in
 the fold. `test/blog_test.js` checks the fold.
 
+## The mesh
+
+Administration's Mesh card holds the station settings of
+`docs/plan-mesh-trust.md` (the app repo): `reach_alerts`, `reach_posts` and
+`reach_chat` (how far away a kind may come from and still be kept: `local`,
+`regional`, `global`), `follow` (callsigns or npubs whose words are kept from
+anywhere and fetched from their own station), `peers_mode` (`open` or
+`named`) and `peers` (the trusted stations). The page only edits them; the
+station applies them at its receive door, its digipeater and its history
+server.
+
 ## The banner, and the logo
 
 What the page lets the administrator set about itself goes through one rule

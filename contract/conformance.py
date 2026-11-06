@@ -305,6 +305,14 @@ def main():
           'both parts are in the blog feed within thirty seconds, for the page to join', [head] + [w for w in ws if 'long-' in w])
     check(http('POST', '/api/xprs/send', {'wire': 't:blog f:%s ts:%s title:bare-%d m:unsigned' % (bob.call, ts(5), seed)})[0] == 400,
           'an unsigned post that is not a part is refused')
+    # The mesh settings (docs/plan-mesh-trust.md): shapes and bounds.
+    st, d = alice.admin('set', settings={'reach_alerts': 'global', 'peers_mode': 'named', 'peers': 'x3town X3HUB', 'follow': 'X1ALIC'})
+    sg = d.get('settings', {})
+    check(st == 200 and sg.get('reach_alerts') == 'global' and sg.get('peers_mode') == 'named' and sg.get('peers') == 'X3TOWN X3HUB' and sg.get('follow') == 'X1ALIC',
+          'the mesh settings are kept: a reach word, a mode, lists of callsigns', d)
+    check(alice.admin('set', settings={'reach_posts': 'far'})[0] == 400, 'a reach is local, regional or global')
+    check(alice.admin('set', settings={'peers': 'nope'})[0] == 400, 'a peer is a callsign')
+    alice.admin('set', settings={'reach_alerts': 'regional', 'peers_mode': 'open', 'peers': '', 'follow': ''})
     # Sharing between stations (XPRS.md 10.10.1): the shapes; the exchange itself needs two stations.
     st, d = alice.rooms('share', call=forum, shared=True, peers=['X3MIRR'])
     sr = [r for r in d.get('rooms', []) if r['call'] == forum]
