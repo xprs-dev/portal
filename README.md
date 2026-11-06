@@ -185,6 +185,19 @@ question (asked, remembered, declined, no extension); `test/ext_smoke.py` drives
 a separate pure-Python BIP-340 verifier (`test/bip340_ref.py`) check what the page
 signed.
 
+## The engines behind the page
+
+The page is one file on every platform; what differs is the engine behind
+`spec/API-HTTP.md`: the Dart core's `WebChatApi` (the Android app's share
+server and the Linux server edition) and the ESP32 firmware's `xwc`
+(`common/xprs_webchat`). `contract/conformance.py <base-url>` is what says
+they agree: a black-box run of the whole API (services, sessions, the
+administrator and settings, moderators and their acts, hosted rooms, alerts)
+with keys of its own, signed by the page's own crypto (`contract/sign.js`,
+which needs node). Run it from the station's network against a station with
+no administrator; it claims the station and releases it at the end. It is
+the contract: a rule goes into the suite first, and every engine must pass.
+
 ## Working on it
 
 ```sh

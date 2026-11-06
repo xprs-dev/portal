@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+"""The station API, black-box: what every engine behind the web chat must do.
+
+    python3 contract/conformance.py http://127.0.0.1:18080
+
+One page, many engines (a Dart server or phone, an ESP32 board, the mock):
+this drives the API the page uses (spec/API-HTTP.md, XPRS.md 10.10) from
+outside, with keys of its own, signing with the page's crypto (sign.js), and
+says where an engine deviates. It must be run from the station's own network
+(the claim is refused from elsewhere), against a station with no
+administrator yet (or one this suite claimed before: it releases it at the
+end).
+
+What it checks: /api/services names the station and what the page may
+offer; a session is a signed nonce, and only the right key gets one; the
+administrator is claimed once, from the network; settings; moderators are
+appointed, accept with their own signature, remove messages and send people
+away, and the station enforces that on history and send; hosted rooms are
+created, listed by visibility, joined by acceptance, posted to and filed;
+alerts are gated by the setting.
+"""
+import json
+import os
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+BASE = sys.argv[1].rstrip('/') if len(sys.argv) > 1 else 'http://127.0.0.1:8780'
+fails = 0
+
+
+def check(ok, what, extra=''):
+    global fails
+    print(('  [PASS] ' if ok else '  [FAIL] ') + what + (('  -- ' + str(extra)) if (extra and not ok) else ''))
+    fails += 0 if ok else 1
+
+
+def sign(priv, canonical):
+    return subprocess.check_output(['node', os.path.join(HERE, 'sign.js'), priv, canonical], text=True)
+
+
+def npub(priv):
+    return subprocess.check_output(['node', os.path.join(HERE, 'sign.js'), '--npub', priv], text=True)
+
+
+def wire_id(wire):
+    return subprocess.check_output(['node', os.path.join(HERE, 'sign.js'), '--id', wire], text=True)
+
+
+def http(method, path, body=None, query=''):
+    url = BASE + path + (('?' + query) if query else '')
+    data = None if body is None else (body if isinstance(body, bytes) else json.dumps(body).encode())
+    req = urllib.request.Request(url, data=data, method=method)
+    if data is not None:
+        req.add_header('Content-Type', 'application/json')
+    # A board verifies a signature in a few hundred milliseconds, and the C3
+    # under QEMU in several seconds, one request at a time: be patient, and
+    # when its backlog resets a connection, ask again.
+    for attempt in range(6):
+        try:
+            with urllib.request.urlopen(req, timeout=180) as r:
+                return r.status, json.loads(r.read().decode() or '{}')
+        except urllib.error.HTTPError as e:
+            try:
+                return e.code, json.loads(e.read().decode() or '{}')
+            except Exception:
+                return e.code, {}
+        except (ConnectionResetError, ConnectionRefusedError, urllib.error.URLError, TimeoutError, OSError) as e:
+            if attempt == 5:
+                raise
+            print('  (%s %s: %s; asking again)' % (method, path, e), file=sys.stderr)
+            time.sleep(3 + 3 * attempt)
+            req = urllib.request.Request(url, data=data, method=method)
+            if data is not None:
+                req.add_header('Content-Type', 'application/json')
+
+
+def ts(plus=0):
+    return time.strftime('%Y-%m-%d_%H:%M:%S', time.gmtime(time.time() + plus))
+
+
+class Person:
+    def __init__(self, priv):
+        self.priv, self.session = priv, None
+        self.npub = npub(priv)
+        # The callsign a key derives (XPRS.md 3), as the page makes it: a
+        # board refuses an X1 identity whose callsign is not its key's.
+        self.call = 'X1' + self.npub[5:9].upper()
+
+    def send(self, canonical):
+        return http('POST', '/api/xprs/send', {'wire': sign(self.priv, canonical)})
+
+    def identity(self):
+        return self.send('t:identity f:%s ts:%s k:%s' % (self.call, ts(), self.npub))
+
+    def prove(self):
+        st, d = http('GET', '/api/session')
+        if st != 200:
+            return st
+        for _ in range(12):
+            st, d2 = http('POST', '/api/session', {'wire': sign(self.priv, 't:session f:%s ts:%s m:%s' % (self.call, ts(), d['nonce']))})
+            if st == 409:          # the station has not learned our key yet
+                time.sleep(3)
+                self.identity()
+                st, d = http('GET', '/api/session')
+                continue
+            if st == 200:
+                self.session = d2['session']
+            return st
+        return st
+
+    def admin(self, action, **kw):
+        return http('POST', '/api/admin', dict(action=action, session=self.session, **kw))
+
+    def rooms(self, action=None, **kw):
+        if action is None:
+            return http('GET', '/api/rooms', query='session=' + (self.session or ''))
+        return http('POST', '/api/rooms', dict(action=action, session=self.session, **kw))
+
+    def state(self):
+        return http('GET', '/api/admin', query='session=' + (self.session or ''))[1]
+
+    def history(self, **q):
+        if self.session:
+            q['session'] = self.session
+        return http('GET', '/api/xprs/history', query='&'.join('%s=%s' % kv for kv in q.items()))[1]
+
+
+def main():
+    seed = int(time.time()) & 0xffff
+    alice = Person('11' * 31 + '%02x' % (seed & 255 or 1))
+    bob = Person('22' * 31 + '%02x' % ((seed >> 8) & 255 or 2))
+    carol = Person('33' * 31 + '%02x' % ((seed * 7) & 255 or 5))
+    print('alice %s, bob %s, carol %s' % (alice.call, bob.call, carol.call))
+
+    print('services')
+    st, sv = http('GET', '/api/services')
+    check(st == 200 and sv.get('ok'), '/api/services answers')
+    page = sv.get('page') or {}
+    station = sv.get('station', '')
+    check(bool(station), 'it names the station', sv)
+    check(page.get('session') is True and page.get('admin') is True, 'the page may offer a session and administration', page)
+    check(page.get('moderation') is True and page.get('rooms') is True, 'and moderation and rooms', page)
+    check(page.get('alerts') in ('moderators', 'everyone'), 'and says who may post alerts', page)
+    check('chat' in page.get('tabs', []), 'the tabs include chat', page)
+
+    print('sessions')
+    for p in (alice, bob, carol):
+        check(p.identity()[0] == 200, 'an identity is accepted: ' + p.call)
+    time.sleep(2)
+    check(alice.prove() == 200 and alice.session, 'the right key gets a session')
+    st, d = http('GET', '/api/session')
+    st2, _ = http('POST', '/api/session', {'wire': sign(bob.priv, 't:session f:%s ts:%s m:%s' % (alice.call, ts(), d['nonce']))})
+    check(st2 == 403, "another key under alice's callsign is refused", st2)
+    st2, _ = http('POST', '/api/session', {'wire': sign(alice.priv, 't:session f:%s ts:%s m:deadbeefdeadbeef' % (alice.call, ts()))})
+    check(st2 == 403, 'a made-up challenge is refused', st2)
+    check(bob.prove() == 200 and carol.prove() == 200, 'bob and carol have sessions too')
+
+    print('the administrator')
+    s0 = alice.state()
+    check(s0.get('local') is True, 'this suite runs from the station\'s network (local)', s0)
+    if s0.get('admin'):
+        print('  (the station has an administrator already: %s; this suite needs a station with none)' % s0['admin'])
+        sys.exit(2)
+    check(s0.get('claimable') is True, 'with no administrator, it is claimable')
+    st, d = alice.admin('claim')
+    check(st == 200 and d.get('admin') == alice.call and d.get('you') is True, 'alice claims it', d)
+    check(d.get('role') == 'invited' and d.get('offer'), 'and is offered the moderator role', d)
+    offer = d.get('offer', '')
+    st, _ = alice.send('t:moderate f:%s d:%s ts:%s r:%s accept:mod' % (alice.call, station, ts(), offer))
+    check(st == 200 and alice.state().get('role') == 'mod', 'which she accepts with her own signature')
+    check(bob.admin('claim')[0] == 409, 'nobody else can claim it now')
+    check('settings' not in bob.state(), 'and bob does not see the settings')
+    st, d = alice.admin('set', settings={'local_private': False, 'who_may_post': 'everyone'})
+    check(st == 200 and d['settings']['local_private'] is False, 'the administrator sets settings', d)
+    check(alice.admin('set', settings={'who_may_alert': 'nobody'})[0] == 400, 'an unknown value is refused')
+
+    print('moderation')
+    st, d = alice.admin('appoint', call=bob.call)
+    check(st == 200 and bob.call in d.get('invited', []), 'the administrator appoints bob', d)
+    bs = bob.state()
+    st, _ = bob.send('t:moderate f:%s d:%s ts:%s r:%s accept:mod' % (bob.call, station, ts(), bs.get('offer', '')))
+    check(st == 200 and bob.state().get('role') == 'mod', 'bob accepts: a moderator')
+    check(sorted(alice.state().get('moderators', [])) == sorted([alice.call, bob.call]), 'both are listed')
+    spam = sign(carol.priv, 't:message f:%s ts:%s m:conformance spam %d' % (carol.call, ts(), seed))
+    st, d = http('POST', '/api/xprs/send', {'wire': spam})
+    check(st == 200, "carol's message is taken", d)
+    spam_id = d.get('id') or wire_id(spam)
+    # An archive files what it heard on its own schedule (the Dart core every
+    # twenty seconds): wait for it rather than demand it at once.
+    for _ in range(30):
+        rows = carol.history(kind='message', limit='50').get('rows', [])
+        if any(r.get('id') == spam_id or 'conformance spam %d' % seed in r.get('wire', '') for r in rows):
+            break
+        time.sleep(1)
+    check(any(r.get('id') == spam_id or 'conformance spam %d' % seed in r.get('wire', '') for r in rows), 'and served in history, within thirty seconds')
+    st, _ = bob.send('t:moderate f:%s d:%s ts:%s r:%s remove:message' % (bob.call, station, ts(), spam_id))
+    check(st == 200, 'a moderator removes it')
+    h = carol.history(kind='message', limit='50')
+    check(not any('conformance spam %d' % seed in r.get('wire', '') for r in h.get('rows', [])), 'it is gone from history')
+    check(spam_id in (h.get('moderation') or {}).get('removed', []), 'and listed under moderation.removed', h.get('moderation'))
+    check(carol.send('t:moderate f:%s d:%s ts:%s revoke:%s' % (carol.call, station, ts(), bob.call))[0] == 403, 'carol, no moderator, cannot act')
+    check(bob.send('t:moderate f:%s d:%s ts:%s grant:%s role:mod' % (bob.call, station, ts(), carol.call))[0] == 403, 'only the administrator appoints')
+    st, _ = bob.send('t:moderate f:%s d:%s ts:%s revoke:%s until:%s' % (bob.call, station, ts(), carol.call, ts(3600)))
+    check(st == 200, 'bob sends carol away for an hour')
+    check(carol.send('t:message f:%s ts:%s m:let me back' % (carol.call, ts()))[0] == 403, 'carol cannot post')
+    check(carol.send('t:sos f:%s ts:%s m:help' % (carol.call, ts()))[0] == 200, 'but her call for help is taken (10.7)')
+    away = alice.state().get('away', [])
+    check(any(a.get('call') == carol.call and a.get('until') for a in away), 'the administrator sees her, with until', away)
+    st, d = alice.admin('lift', call=carol.call)
+    check(st == 200 and not any(a.get('call') == carol.call for a in d.get('away', [])), 'and lifts it')
+    check(carol.send('t:message f:%s ts:%s m:thanks' % (carol.call, ts()))[0] == 200, 'carol posts again')
+    st, d = alice.admin('dismiss', call=bob.call)
+    check(st == 200 and bob.call not in d.get('moderators', []), 'bob is dismissed', d)
+    check(bob.send('t:moderate f:%s d:%s ts:%s r:%s remove:message' % (bob.call, station, ts(), spam_id))[0] == 403, 'and cannot act any more')
+
+    print('hosted rooms')
+    check(bob.rooms('create', name='Block C')[0] == 403, 'only the administrator creates a room')
+    st, d = alice.rooms('create', name='Block C %d' % seed, about='residents', visibility='public', posting='members')
+    check(st == 200 and d.get('room', '').startswith('X5'), 'the administrator creates one: an X5 group', d)
+    room = d.get('room', '')
+    mine = [r for r in d.get('rooms', []) if r['call'] == room]
+    check(mine and mine[0].get('role') == 'invited' and mine[0].get('offer'), 'and is offered its moderator role', mine)
+    st, _ = alice.send('t:moderate f:%s d:%s ts:%s r:%s accept:mod' % (alice.call, room, ts(), mine[0].get('offer', '') if mine else ''))
+    check(st == 200, 'which she accepts')
+    check(bob.send('t:message f:%s d:%s ts:%s m:hi' % (bob.call, room, ts()))[0] == 403, 'bob, no member, cannot post there')
+    st, d = alice.rooms('add', call=room, member=bob.call)
+    check(st == 200, 'the administrator adds bob')
+    rb = [r for r in bob.rooms()[1].get('rooms', []) if r['call'] == room]
+    check(rb and rb[0].get('role') == 'invited' and rb[0].get('can_post') is False, 'bob sees the invitation', rb)
+    st, _ = bob.send('t:moderate f:%s d:%s ts:%s r:%s accept:member' % (bob.call, room, ts(), rb[0].get('offer', '') if rb else ''))
+    rb = [r for r in bob.rooms()[1].get('rooms', []) if r['call'] == room]
+    check(st == 200 and rb and rb[0].get('role') == 'member' and rb[0].get('can_post') is True, 'bob accepts: a member who may post')
+    st, d = bob.send('t:message f:%s d:%s ts:%s m:hello room %d' % (bob.call, room, ts(), seed))
+    check(st == 200, "bob's message is taken", d)
+    for _ in range(30):
+        hr = carol.history(kind='message,reaction', room=room, limit='50')
+        if any('hello room %d' % seed in r.get('wire', '') for r in hr.get('rows', [])):
+            break
+        time.sleep(1)
+    check(any('hello room %d' % seed in r.get('wire', '') for r in hr.get('rows', [])), 'a public room is read by anybody')
+    check(not any('hello room %d' % seed in r.get('wire', '') for r in carol.history(kind='message', limit='50').get('rows', [])),
+          'and its message is not in the open rooms')
+    st, d = alice.rooms('update', call=room, visibility='private')
+    check(st == 200 and [r for r in d['rooms'] if r['call'] == room][0]['posting'] == 'members', 'made private: members-only')
+    check(not any(r['call'] == room for r in carol.rooms()[1].get('rooms', [])), 'a private room is not listed to carol')
+    check(http('GET', '/api/xprs/history', query='room=%s&session=%s' % (room, carol.session))[0] == 404, 'nor served to her')
+    check(any('hello room %d' % seed in r.get('wire', '') for r in bob.history(kind='message', room=room, limit='50').get('rows', [])), 'but to its member')
+    st, _ = alice.send('t:moderate f:%s d:%s ts:%s revoke:%s' % (alice.call, room, ts(), bob.call))
+    check(st == 200 and bob.send('t:message f:%s d:%s ts:%s m:again' % (bob.call, room, ts()))[0] == 403, 'a room moderator sends bob away')
+    st, d = alice.rooms('close', call=room)
+    check(st == 200 and not any(r['call'] == room for r in d.get('rooms', [])), 'closed')
+
+    print('alerts')
+    check(carol.send('t:warning f:%s kind:outage sev:watch ts:%s until:%s m:conformance' % (carol.call, ts(), ts(600)))[0] == 403,
+          'by default a visitor may not post an alert')
+    st, d = alice.send('t:warning f:%s kind:outage sev:watch ts:%s until:%s m:conformance %d' % (alice.call, ts(), ts(600), seed))
+    check(st == 200, 'the administrator may', d)
+    aid = d.get('id', '')
+    check(alice.send('t:warning f:%s ts:%s r:%s remove:warning' % (alice.call, ts(), aid))[0] == 200, 'and withdraws her own')
+    alice.admin('set', settings={'who_may_alert': 'everyone'})
+    check(carol.send('t:warning f:%s kind:outage sev:watch ts:%s until:%s m:conformance' % (carol.call, ts(), ts(600)))[0] == 200,
+          'opened to everyone, carol may')
+    alice.admin('set', settings={'who_may_alert': 'moderators', 'local_private': True})
+
+    print('release')
+    st, d = alice.admin('release')
+    check(st == 200 and d.get('admin') is None and d.get('claimable') is True, 'the administrator releases the station; it is claimable again', d)
+    print('%d failure(s)' % fails if fails else 'all passed')
+    sys.exit(1 if fails else 0)
+
+
+main()
