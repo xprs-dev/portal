@@ -30,7 +30,7 @@ says which panels it fills and whether it offers the app:
 { "ok": true, "page": { "tabs": ["chat", "traffic"], "config": false, "app": "/app", "session": true } }
 ```
 
-`tabs` are the panels the station can serve (`chat`, `traffic`, `devices`,
+`tabs` are the views the station can serve, offered in the menu (`chat`, `traffic`, `devices`,
 `stats`, `station`, `settings`); the others are hidden. `config: false` hides
 the board's `/config` link. `app` is the path of a page where the app can be
 downloaded, and shows a "Get the app" link. `session: true` says the station

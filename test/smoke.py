@@ -65,11 +65,11 @@ for board, port in ((False, 8781), (True, 8782)):
         p.terminate()
     check('hello from the mock' in d, 'a public row from /api/xprs/history is drawn')
     check('data-r="blog"' in d, 'the Feed lists Blog, under Social and Alerts')
-    hidden = lambda t: bool(re.search(r'data-tab="%s"[^>]*style="display: none' % t, d))
+    hidden = lambda t: bool(re.search(r'data-view="%s"[^>]*style="display: none' % t, d))
     link = re.search(r'id="getapp" class="([^"]*)" href="([^"]*)"', d)
     admin_btn = re.search(r'id="adminbtn" style="([^"]*)"', d)
     if board:
-        check(not hidden('devices'), 'every tab shows, as on the boards today')
+        check(not hidden('devices'), 'every view the board serves is in the menu')
         check(link is not None and 'hide' in link.group(1), 'no Get the app link')
         check('id="stcall" title="the station you are using">(X1BOARD)<' in d,
               'the title names the station, read from /api/status')
@@ -80,10 +80,10 @@ for board, port in ((False, 8781), (True, 8782)):
               'the title names the station: XPRS (X3MOCK)')
         check(admin_btn is not None and 'none' not in admin_btn.group(1),
               'the menu offers Administration')
-        check(hidden('devices'), 'a tab the host does not serve is hidden')
+        check(hidden('devices'), 'a view the host does not serve is not in the menu')
         check('data-r="forum"' in d, 'the Feed lists Forum, beside Blog')
         check('id="fab" class="fab hide"' in d, 'the round + is there, hidden in a chat room')
-        check(not hidden('traffic'), 'a tab it serves stays')
+        check(not hidden('traffic'), 'one it serves is')
         check(link is not None and link.group(1) == '' and link.group(2) == '/app',
               'Get the app links to the host\'s download page')
 print('a station whose newest 200 messages are all one busy room')
