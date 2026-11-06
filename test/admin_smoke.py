@@ -96,6 +96,7 @@ async def run(port, remote):
                 await ev("(document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'})),1)")
                 check(not await ev(is_open), 'and so does Escape')
                 await click('.menu-btn')
+                await asyncio.sleep(0.4)  # the drawer slides in
                 await click('#adminbtn')
                 check(not await ev(is_open), 'choosing an item closes it too')
             else:
