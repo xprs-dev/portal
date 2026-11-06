@@ -47,6 +47,13 @@
 - **`test/shots.py`**: screenshots of every feed and panel (desktop, phone,
   landscape) against the mock, claimed as administrator, into a directory:
   the way to look at a change before deciding it looks right.
+- **The palette on `:root`** (`--panel`, `--field`, `--line`, `--dim`,
+  `--on-accent`, `--own`, `--banner`, `--hover`, `--accent-soft`, `--radius`
+  beside the five colours): no grey is written twice in the stylesheet, so a
+  theme is one `:root` block. New CSS uses these, never a literal grey.
+- **`THEMES` with `themeChips()` / `pickTheme()`**: a named CSS preset is a
+  chip with a three-colour swatch; picking previews and fills the stylesheet.
+  A seventh theme is one more entry.
 - **`page_<name>` settings** (`applyCss()`, `applyLogo()`, `drawBanner()`):
   anything the page lets the administrator set about itself is a string the
   station stores under `page_<name>` and reports as `page.<name>`, with no

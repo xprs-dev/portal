@@ -166,9 +166,15 @@ the names mean, so a new one costs it nothing. The page uses three:
   administrator writes one.
 - `page_logo`: HTML in place of the XPRS lettering at the top left, an image
   or text; it still goes home on a click.
-- `page_css`: a stylesheet added after the page's own, in `<style id="st-css">`;
-  the colours are custom properties on `:root` (`--accent`, `--bg`, `--text`,
-  `--muted`, `--border`), so a colour scheme is one line.
+- `page_css`: a stylesheet added after the page's own, in `<style id="st-css">`.
+  The whole palette is custom properties on `:root` (`--accent`, `--bg`,
+  `--text`, `--muted`, `--border`, `--panel`, `--field`, `--line`, `--dim`,
+  `--on-accent`, `--own`, `--banner`, `--radius` and a few more at the top of
+  the stylesheet), so a colour scheme is one block. Six themes to start from
+  (`THEMES`: Orange retro, Clean dark, Cyberpunk, Rose, Paper, Forest) are
+  chips above the stylesheet: picking one previews it in the page and fills
+  the stylesheet, which Save stores like any hand-written one, so a theme is
+  nothing to the station. `test/theme_shots.py` screenshots each.
 
 All three are in Administration, under Banner and Look, take effect in the
 administrator's own page at once and reach other visitors on their next load.
