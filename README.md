@@ -176,7 +176,8 @@ station keeps a copy, asks the owner for what it filed (`sync`, and every
 minute when there is news), and the owner asks it back, so a post made on
 either side reaches the other. A mirrored room's card says so, offers "Sync
 now" and "Stop mirroring", and has no member controls: the mirror never signs
-as the room.
+as the room. Sharing a private room asks for confirmation first: served to
+members here, it is readable by the peer stations' operators too.
 
 ## Private messages
 
