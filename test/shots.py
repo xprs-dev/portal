@@ -96,7 +96,7 @@ try:
         shot(c, mode + '_own_look')
         c.eval("showTab('admin')")
         c.wait("!!document.getElementById('ad-css')", 5)
-        c.eval("document.getElementById('themes').scrollIntoView({block:'center'})")
+        c.eval("pickTheme(0);document.getElementById('themes').scrollIntoView({block:'start'})")
         time.sleep(0.5)
         shot(c, mode + '_admin_look')
         c.eval("adminSet({page_logo:''});adminSet({page_css:''});showTab('chat')")

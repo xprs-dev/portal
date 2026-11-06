@@ -173,8 +173,11 @@ the names mean, so a new one costs it nothing. The page uses three:
   the stylesheet), so a colour scheme is one block. Six themes to start from
   (`THEMES`: Orange retro, Clean dark, Cyberpunk, Rose, Paper, Forest) are
   chips above the stylesheet: picking one previews it in the page and fills
-  the stylesheet, which Save stores like any hand-written one, so a theme is
-  nothing to the station. `test/theme_shots.py` screenshots each.
+  the stylesheet with the theme's whole block, every property named and
+  the default one annotated, to edit before Save, which stores it like any
+  hand-written one, so a theme is nothing to the station. Administration
+  redraws itself every minute, but not while a field holds unsaved text
+  (`adminDirty`). `test/theme_shots.py` screenshots each theme.
 
 All three are in Administration, under Banner and Look, take effect in the
 administrator's own page at once and reach other visitors on their next load.

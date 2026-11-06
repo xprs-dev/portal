@@ -105,12 +105,14 @@ try:
     check(c.eval("document.getElementById('banner').className") == '', 'a click opens it again')
     c.eval("showTab('admin')")
     check(c.wait("document.querySelectorAll('#themes .theme').length===6", 5), 'the Look card offers six themes')
+    c.eval("pickTheme(0)")
+    check(c.eval("document.getElementById('ad-css').value.indexOf('--accent:#ffa86a')>0"), 'the default theme lists its whole palette to edit')
     c.eval("pickTheme(2)")
-    check(c.eval("document.getElementById('ad-css').value===THEMES[2].css&&document.getElementById('st-css').textContent===THEMES[2].css&&document.querySelector('#themes .theme.on').textContent==='Cyberpunk'"),
+    check(c.eval("document.getElementById('ad-css').value===prettyCss(THEMES[2].css)&&document.getElementById('st-css').textContent===THEMES[2].css&&document.querySelector('#themes .theme.on').textContent==='Cyberpunk'"),
           'picking one previews it and fills the stylesheet, the chip lit')
     c.eval("adminSet({page_css:document.getElementById('ad-css').value})")
     c.load('http://127.0.0.1:%d/' % PORT)
-    check(c.wait("document.getElementById('st-css').textContent===THEMES[2].css", 5), 'saved, a visitor gets the theme')
+    check(c.wait("document.getElementById('st-css').textContent===prettyCss(THEMES[2].css)", 5), 'saved, a visitor gets the theme')
     c.eval("adminSet({page_logo:''});adminSet({page_css:''})")
     check(c.wait("document.getElementById('logo').innerText==='XPRS'", 5), 'emptied, the logo is XPRS again')
     c.eval("showTab('chat');switchRoom('forum')")
