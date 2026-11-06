@@ -45,16 +45,17 @@ try:
     fab = "getComputedStyle(document.getElementById('fab')).display"
 
     print('the banner and the logo')
-    check(c.wait("getComputedStyle(document.getElementById('banner')).display!=='none'&&document.getElementById('bn-body').innerText.indexOf('Welcome')>=0"),
-          'the station\'s banner shows under the header, the template by default')
+    check(c.wait("getComputedStyle(document.getElementById('banner')).display!=='none'&&document.getElementById('bn-body').innerText.indexOf('XPRS station')>=0"),
+          'the banner shows under the header: the page\'s own text while the station has none')
+    open_h = c.eval("document.getElementById('banner').offsetHeight")
     c.eval("bannerToggle()")
-    check(c.eval("getComputedStyle(document.getElementById('banner')).display") == 'none', 'the x hides it')
+    check(c.eval("document.getElementById('banner').className") == 'min'
+          and c.eval("document.getElementById('banner').offsetHeight") < open_h, 'the arrow minimizes it to one line')
     c.load('http://127.0.0.1:%d/' % PORT)
-    check(c.wait("bannerDrawn.indexOf('Welcome')>=0&&getComputedStyle(document.getElementById('banner')).display==='none'"),
-          'hidden stays hidden after a reload')
-    check(c.eval("document.getElementById('bnbtn').textContent") == 'Show banner', 'the menu offers it back')
-    c.eval("bannerToggle()")
-    check(c.eval("getComputedStyle(document.getElementById('banner')).display") != 'none', 'and shows it')
+    check(c.wait("bannerDrawn.indexOf('XPRS station')>=0&&document.getElementById('banner').className==='min'"),
+          'minimized stays minimized after a reload')
+    c.eval("document.getElementById('banner').click()")
+    check(c.eval("document.getElementById('banner').className") == '', 'a click opens it again')
     c.eval("switchRoom('blog');showTab('traffic')")
     c.eval("document.querySelector('.header .logo').click()")
     check(c.eval("tab==='chat'&&curRoom==='local'"), 'the logo goes back to the chat')
@@ -104,6 +105,8 @@ try:
     check(c.wait("!!document.getElementById('fc-name')"), 'the category panel')
     c.eval("document.getElementById('fc-name').value='Antennas';document.getElementById('fc-about').value='Wire, masts, tuners';categoryCreate()")
     check(c.wait("curRoom.slice(0,2)==='f:'&&curRoom!=='f:X5F0RM'", 10), 'created and opened')
+    check(c.wait("hostedByCall[curRoom.slice(2)]&&hostedByCall[curRoom.slice(2)].role==='mod'", 10),
+          'the administrator moderates it without being asked')
     c.eval("switchRoom('forum')")
     check(c.wait("document.querySelectorAll('#msgs .cat').length===2"), 'two categories now')
     c.eval("switchRoom('alerts')")

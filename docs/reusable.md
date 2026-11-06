@@ -48,7 +48,8 @@
   landscape) against the mock, claimed as administrator, into a directory:
   the way to look at a change before deciding it looks right.
 - **`drawBanner()` with `bannerHtml` and `xprs_banner`**: a block of the
-  station's HTML under the header, hidden and shown per browser. Any other
+  station's HTML under the header, minimized or open per browser, the page's
+  own text when the station has none. Any other
   per-station notice the page should carry can ride the same setting path
   (`page.<name>` on `/api/services`, a setting on `/api/admin`).
 - **`fabSet(mode)` / `fabClick()` / `closeComposer()`**: the round + of a

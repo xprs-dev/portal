@@ -158,13 +158,19 @@ the fold. `test/blog_test.js` checks the fold.
 
 Under the header the page shows the station's banner: HTML its administrator
 writes in Administration (the `banner` setting on `/api/admin`, at most 4000
-characters; `page.banner` on `/api/services` carries it to every visitor), a
-short template until they do, nothing when they empty it. It is the
-administrator's own HTML, trusted as the station is. The x on it hides it;
-the choice is kept in this browser (`xprs_banner`) and the menu's "Show
-banner" brings it back. It scrolls past about a quarter of the screen and
-is cut to one or two lines on a phone held sideways. The XPRS logo at the top
-left goes back to the chat's Local room from anywhere.
+characters; `page.banner` on `/api/services` carries it to every visitor).
+The station holds a string and nothing more: empty, the page shows its own
+text about what a station is (`BANNER_DEFAULT`), which the Default button
+puts back; a banner with no text in it, `<!-- none -->`, shows nothing. It is
+the administrator's own HTML, trusted as the station is. The arrow on it
+minimizes it to its first line and opens it again; the choice is kept in this
+browser (`xprs_banner`). Open, it scrolls past about a quarter of the screen,
+a third on a phone held sideways. The XPRS logo at the top left goes back to
+the chat's Local room from anywhere.
+
+The administrator moderates every room the station hosts: the role the
+station offers on each room is accepted by the page as it comes, so no
+"Accept moderating" is ever asked of them.
 
 ## Forum rooms
 

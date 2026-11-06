@@ -115,7 +115,7 @@ def forum_topics(room):
 # the shapes). MOCK_REMOTE makes every visitor one from the internet.
 ADMIN = {'call': None}
 SETTINGS = {'local_private': True, 'who_may_post': 'everyone', 'who_may_alert': 'moderators',
-            'banner': '<strong>Welcome to this station.</strong> Operated by <em>your name</em> from <em>your town</em>. Local chat, alerts, posts and a forum for the area it reaches.'}
+            'banner': ''}
 LOCAL = not os.environ.get('MOCK_REMOTE')
 
 

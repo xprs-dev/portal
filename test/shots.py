@@ -53,6 +53,9 @@ try:
         c.load('http://127.0.0.1:%d/' % PORT)
         c.wait("canSign()", 10)
         shot(c, mode + '_chat')
+        c.eval("bannerToggle()")
+        shot(c, mode + '_banner_min')
+        c.eval("bannerToggle()")
         c.eval("showTab('admin')")
         if c.wait("!!document.getElementById('ad-claim')", 5):
             c.eval("document.getElementById('ad-claim').click()")
