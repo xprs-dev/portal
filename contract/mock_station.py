@@ -114,7 +114,8 @@ def forum_topics(room):
 # /api/admin (the rules are WebChatApi's, tested in the core; this answers
 # the shapes). MOCK_REMOTE makes every visitor one from the internet.
 ADMIN = {'call': None}
-SETTINGS = {'local_private': True, 'who_may_post': 'everyone', 'who_may_alert': 'moderators'}
+SETTINGS = {'local_private': True, 'who_may_post': 'everyone', 'who_may_alert': 'moderators',
+            'banner': '<strong>Welcome to this station.</strong> Operated by <em>your name</em> from <em>your town</em>. Local chat, alerts, posts and a forum for the area it reaches.'}
 LOCAL = not os.environ.get('MOCK_REMOTE')
 
 
@@ -196,7 +197,10 @@ class H(BaseHTTPRequestHandler):
         elif u.path == '/app':
             self._send(200, b'<html><body>download page</body></html>', 'text/html')
         elif u.path == '/api/services':
-            self._send(200, SERVICES)
+            sv = dict(SERVICES)
+            if 'page' in sv:   # what the administrator set, as the station reports it
+                sv['page'] = dict(sv['page'], alerts=SETTINGS['who_may_alert'], banner=SETTINGS['banner'])
+            self._send(200, sv)
         elif u.path == '/api/session':
             self._send(200, {'ok': True, 'nonce': NONCE})
         elif u.path == '/api/status':

@@ -44,6 +44,13 @@
   `load(url)`, `eval(js)`, `wait(js, seconds)` polls until truthy. Used by
   `layout_smoke.py` (device emulation) and `feed_smoke.py` (clicking through
   the feeds); any browser test that runs script in the page starts here.
+- **`test/shots.py`**: screenshots of every feed and panel (desktop, phone,
+  landscape) against the mock, claimed as administrator, into a directory:
+  the way to look at a change before deciding it looks right.
+- **`drawBanner()` with `bannerHtml` and `xprs_banner`**: a block of the
+  station's HTML under the header, hidden and shown per browser. Any other
+  per-station notice the page should carry can ride the same setting path
+  (`page.<name>` on `/api/services`, a setting on `/api/admin`).
 - **`fabSet(mode)` / `fabClick()` / `closeComposer()`**: the round + of a
   feed and the panel it opens at the top of the conversation column. A feed's
   loader redraws only while no `#composer` is open, so a new feed with

@@ -137,8 +137,7 @@ a panel at the top of the feed and leaves it alone while it is open. On
 Alerts the + is offered only to whom the station lets post (`page.alerts`,
 XPRS.md 10.10.2): the moderators and the administrator, or everyone; the panel
 composes a signed warning (kind, severity, how long) or notice, and the author
-may withdraw their own. "Post an alert" in the menu (top right) opens the same
-form with the active alerts under it.
+may withdraw their own.
 
 Blog is the next feed entry: the `t:blog` posts the station holds (XPRS.md
 18), newest first, as cards with the title, the text, the author and the
@@ -154,6 +153,18 @@ as given, so nothing is asked of it beyond the spec: a part carries no
 signature of its own and the page joins the set and judges the whole. A whole
 post filed by a station that joined the parts itself outranks the parts in
 the fold. `test/blog_test.js` checks the fold.
+
+## The banner, and the logo
+
+Under the header the page shows the station's banner: HTML its administrator
+writes in Administration (the `banner` setting on `/api/admin`, at most 4000
+characters; `page.banner` on `/api/services` carries it to every visitor), a
+short template until they do, nothing when they empty it. It is the
+administrator's own HTML, trusted as the station is. The x on it hides it;
+the choice is kept in this browser (`xprs_banner`) and the menu's "Show
+banner" brings it back. It scrolls past about a quarter of the screen and
+is cut to one or two lines on a phone held sideways. The XPRS logo at the top
+left goes back to the chat's Local room from anywhere.
 
 ## Forum rooms
 

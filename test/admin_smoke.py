@@ -109,8 +109,8 @@ async def run(port, remote):
                 await ev("(switchRoom('alerts'),1)")
                 await asyncio.sleep(2)
                 check('power cut' in (await ev("document.getElementById('msgs').innerText") or '')
-                      and await ev("document.getElementById('alertbtn').style.display") == 'none',
-                      'a visitor sees the alerts feed and, by default, no "Post an alert" in the menu')
+                      and await ev("getComputedStyle(document.getElementById('fab')).display") == 'none',
+                      'a visitor sees the alerts feed and, by default, no + to post one')
                 return
             check('none yet' in text and await ev("!!document.getElementById('ad-claim')"),
                   'a station with no administrator offers the claim')
@@ -126,7 +126,8 @@ async def run(port, remote):
             await asyncio.sleep(2)
             st = json.loads(urllib.request.urlopen(urllib.request.Request(
                 'http://127.0.0.1:%d/__admin' % port, method='POST', data=b'{}')).read())
-            check(st['settings'] == {'local_private': False, 'who_may_post': 'local', 'who_may_alert': 'moderators'},
+            got = {k: st['settings'].get(k) for k in ('local_private', 'who_may_post', 'who_may_alert')}
+            check(got == {'local_private': False, 'who_may_post': 'local', 'who_may_alert': 'moderators'},
                   'changed settings reach the station: %s' % st['settings'])
 
             # Moderation (XPRS.md 10.10).
@@ -210,12 +211,13 @@ async def run(port, remote):
             check('power cut' in text, 'opening it lists the active alert in the conversation column')
             check('(1)' not in (await ev("document.getElementById('alertsroom').textContent") or ''),
                   'and clears the count')
-            check(await ev("document.getElementById('txt').disabled"), 'the composer is off in the feed')
-            check(await ev("document.getElementById('alertbtn').style.display") != 'none',
-                  'a moderator has "Post an alert" in the menu')
-            await ev("(showTab('alerts'),1)")
-            await asyncio.sleep(2)
-            check(await ev("!!document.getElementById('al-text')"), 'the window behind it has the form')
+            check(await ev("getComputedStyle(document.querySelector('.input-area')).display") == 'none',
+                  'no composer bar in the feed')
+            check(await ev("fabMode==='alert'&&getComputedStyle(document.getElementById('fab')).display") != 'none',
+                  'a moderator has the + on Alerts')
+            await ev("(fabClick(),1)")
+            await asyncio.sleep(1)
+            check(await ev("!!document.getElementById('al-text')"), 'it opens the alert form at the top of the feed')
             await ev("(document.getElementById('al-kind').value='road',"
                      "document.getElementById('al-text').value='bridge closed',postAlert(),1)")
             await asyncio.sleep(3)
@@ -223,7 +225,7 @@ async def run(port, remote):
             mine = [x for x in sent if x.startswith('t:warning') and 'bridge closed' in x]
             check(len(mine) == 1 and ' kind:road ' in mine[0] and ' sev:' in mine[0] and ' until:' in mine[0]
                   and ' sig:' in mine[0], 'a posted alert is a signed t:warning with kind, sev and until')
-            text = await ev("document.getElementById('v-alerts').innerText") or ''
+            text = await ev("document.getElementById('msgs').innerText") or ''
             check('bridge closed' in text and 'Withdraw' in text, 'it is listed, with Withdraw on our own')
             await ev("(withdrawAlert(document.querySelector('.alert[data-id] button')"
                      "&&[].slice.call(document.querySelectorAll('.alert')).filter(function(a){"

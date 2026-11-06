@@ -44,6 +44,21 @@ try:
     bar = "getComputedStyle(document.querySelector('.input-area')).display"
     fab = "getComputedStyle(document.getElementById('fab')).display"
 
+    print('the banner and the logo')
+    check(c.wait("getComputedStyle(document.getElementById('banner')).display!=='none'&&document.getElementById('bn-body').innerText.indexOf('Welcome')>=0"),
+          'the station\'s banner shows under the header, the template by default')
+    c.eval("bannerToggle()")
+    check(c.eval("getComputedStyle(document.getElementById('banner')).display") == 'none', 'the x hides it')
+    c.load('http://127.0.0.1:%d/' % PORT)
+    check(c.wait("bannerDrawn.indexOf('Welcome')>=0&&getComputedStyle(document.getElementById('banner')).display==='none'"),
+          'hidden stays hidden after a reload')
+    check(c.eval("document.getElementById('bnbtn').textContent") == 'Show banner', 'the menu offers it back')
+    c.eval("bannerToggle()")
+    check(c.eval("getComputedStyle(document.getElementById('banner')).display") != 'none', 'and shows it')
+    c.eval("switchRoom('blog');showTab('traffic')")
+    c.eval("document.querySelector('.header .logo').click()")
+    check(c.eval("tab==='chat'&&curRoom==='local'"), 'the logo goes back to the chat')
+
     print('the Blog feed')
     c.eval("switchRoom('blog')")
     check(c.eval(bar) == 'none', 'no composer bar on the Blog')
@@ -78,6 +93,11 @@ try:
     check(c.wait("!!document.getElementById('ad-claim')"), 'the station offers the claim')
     c.eval("document.getElementById('ad-claim').click()")
     check(c.wait("isStationAdmin===true", 10), 'claimed')
+    check(c.wait("!!document.getElementById('ad-banner')", 5), 'Administration has the banner card')
+    c.eval("document.getElementById('ad-banner').value='<b>Hill station</b> on air';adminSet({banner:document.getElementById('ad-banner').value})")
+    check(c.wait("document.getElementById('bn-body').innerText.indexOf('Hill station')>=0", 5), 'the administrator writes the banner')
+    c.load('http://127.0.0.1:%d/' % PORT)
+    check(c.wait("document.getElementById('bn-body').innerText.indexOf('Hill station')>=0", 5), 'and every visitor gets it from the station')
     c.eval("showTab('chat');switchRoom('forum')")
     check(c.wait("fabMode==='category'&&" + fab + "!=='none'"), 'the + offers a new category to the administrator')
     c.eval("fabClick()")
