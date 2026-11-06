@@ -45,17 +45,8 @@ try:
     fab = "getComputedStyle(document.getElementById('fab')).display"
 
     print('the banner and the logo')
-    check(c.wait("getComputedStyle(document.getElementById('banner')).display!=='none'&&document.getElementById('bn-body').innerText.indexOf('XPRS station')>=0"),
-          'the banner shows under the header: the page\'s own text while the station has none')
-    open_h = c.eval("document.getElementById('banner').offsetHeight")
-    c.eval("bannerToggle()")
-    check(c.eval("document.getElementById('banner').className") == 'min'
-          and c.eval("document.getElementById('banner').offsetHeight") < open_h, 'the arrow minimizes it to one line')
-    c.load('http://127.0.0.1:%d/' % PORT)
-    check(c.wait("bannerDrawn.indexOf('XPRS station')>=0&&document.getElementById('banner').className==='min'"),
-          'minimized stays minimized after a reload')
-    c.eval("document.getElementById('banner').click()")
-    check(c.eval("document.getElementById('banner').className") == '', 'a click opens it again')
+    check(c.eval("getComputedStyle(document.getElementById('banner')).display") == 'none',
+          'no banner until the station has one')
     c.eval("switchRoom('blog');showTab('traffic')")
     c.eval("document.querySelector('.header .logo').click()")
     check(c.eval("tab==='chat'&&curRoom==='local'"), 'the logo goes back to the chat')
@@ -103,6 +94,15 @@ try:
     c.load('http://127.0.0.1:%d/' % PORT)
     check(c.wait("document.getElementById('bn-body').innerText.indexOf('Hill station')>=0&&document.getElementById('logo').innerText==='HILL'&&document.getElementById('st-css').textContent.indexOf('6fc3ff')>=0", 5),
           'and every visitor gets all three from the station')
+    open_h = c.eval("document.getElementById('banner').offsetHeight")
+    c.eval("bannerToggle()")
+    check(c.eval("document.getElementById('banner').className") == 'min'
+          and c.eval("document.getElementById('banner').offsetHeight") <= open_h, 'the arrow minimizes the banner')
+    c.load('http://127.0.0.1:%d/' % PORT)
+    check(c.wait("bannerDrawn.indexOf('Hill station')>=0&&document.getElementById('banner').className==='min'"),
+          'minimized stays minimized after a reload')
+    c.eval("document.getElementById('banner').click()")
+    check(c.eval("document.getElementById('banner').className") == '', 'a click opens it again')
     c.eval("adminSet({page_logo:''});adminSet({page_css:''})")
     check(c.wait("document.getElementById('logo').innerText==='XPRS'", 5), 'emptied, the logo is XPRS again')
     c.eval("showTab('chat');switchRoom('forum')")

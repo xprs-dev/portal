@@ -162,10 +162,8 @@ at most 8000 characters, stored as given and reported as `page.<name>` on
 `/api/services`, gone when set to empty. The station knows nothing of what
 the names mean, so a new one costs it nothing. The page uses three:
 
-- `page_banner`: HTML under the header for every visitor. Empty, the page
-  shows its own text about what a station is (`BANNER_DEFAULT`), which the
-  Default button puts back; a banner with no text in it, `<!-- none -->`,
-  shows nothing.
+- `page_banner`: HTML under the header for every visitor; none until the
+  administrator writes one.
 - `page_logo`: HTML in place of the XPRS lettering at the top left, an image
   or text; it still goes home on a click.
 - `page_css`: a stylesheet added after the page's own, in `<style id="st-css">`;
