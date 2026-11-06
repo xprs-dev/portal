@@ -137,6 +137,17 @@ the moderators and the administrator, or everyone; the form composes a signed
 warning (kind, severity, how long) or notice, and the author may withdraw
 their own.
 
+Blog is the next feed entry: the `t:blog` posts the station holds (XPRS.md
+18), newest first, as cards with the title, the text, the author and the
+tags. A long post arrives split (7.6) and the archive keeps the parts, so the
+page joins them, keyed on author and timestamp (6.6), and never shows one
+with a part missing. A later post with the same title from the same author
+replaces the earlier (18.1) and reads as edited. The entry counts the posts
+this browser has not looked at, polled every thirty seconds. Posts are
+published from the app: a visitor cannot send `t:blog` through the station
+(`WebChatApi.postable`), so the composer is off in this feed.
+`test/blog_test.js` checks the fold.
+
 ## Private messages
 
 "Private message" (the menu, or the People heading on the left) starts one

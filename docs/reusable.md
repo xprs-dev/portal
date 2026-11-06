@@ -10,6 +10,13 @@
 - **`backfillRooms()`**: asks a list of `/api/xprs/history` questions one after
   another on the shared `getJSON`, never in parallel, because a board has one
   HTTP worker. Reuse the chained shape for any one-off series of reads.
+- **`headField(w, key)`**: one value from a wire's head (before `m:`), or
+  `''`. Use it instead of a fresh regex wherever the page reads a field off a
+  packet.
+- **`blogPosts(rows)`**: folds history rows of one type into publications:
+  joins split parts keyed on `(f, ts)` (6.6), drops a set with a hole, keeps
+  the newest edition per author and `title:` (18.1). Events (26) replace by
+  title the same way, so an Events feed would reuse it with `t:event`.
 - **`distCell(v)`**: the Distance cell for a devices row -- the sum when the
   station could add the legs up, the first leg as a floor (`>~12 m`) when the
   relay has not said, the relay's name beside it. Anything that prints a

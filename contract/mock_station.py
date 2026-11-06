@@ -33,6 +33,14 @@ ROWS.append({
     'from': 'X3RLY7', 'to': '', 'type': 'warning', 'sig': 'verified', 'own': False,
     'wire': 't:warning f:X3RLY7 kind:outage sev:watch ts:2026-11-06_18:00:00 m:power cut in block C',
 })
+# A post the station holds (XPRS.md 18), split in two parts (7.6).
+for i, part in enumerate(('The wire ends are the whole job.', 'Everything else is decoration.')):
+    ROWS.append({
+        'id': 'b10%d' % i, 'ts': int(time.time()) - 600, 'bearer': 'lan', 'rssi': 0,
+        'from': 'X1QZ3N', 'to': '', 'type': 'blog', 'sig': 'verified', 'own': False,
+        'wire': 't:blog f:X1QZ3N ts:2026-08-08_14:26:40 title:antenna-notes tag:radio '
+                'n:%d/2 m:%s' % (i + 1, part),
+    })
 # Rooms the station hosts (10.10.1): call -> meta; the roster is ROOM_ROLES.
 ROOMS = {}
 ROOM_ROLES = {}   # (call, member) -> 'invited' | 'member' | 'mod'

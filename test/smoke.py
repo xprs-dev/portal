@@ -62,6 +62,7 @@ for board, port in ((False, 8781), (True, 8782)):
     finally:
         p.terminate()
     check('hello from the mock' in d, 'a public row from /api/xprs/history is drawn')
+    check('data-r="blog"' in d, 'the Feed lists Blog, under Social and Alerts')
     hidden = lambda t: bool(re.search(r'data-tab="%s"[^>]*style="display: none' % t, d))
     link = re.search(r'id="getapp" class="([^"]*)" href="([^"]*)"', d)
     admin_btn = re.search(r'id="adminbtn" style="([^"]*)"', d)
