@@ -52,9 +52,14 @@ def room_json(call, who, admin):
     role = ROOM_ROLES.get((call, who), 'none')
     members_only = m['visibility'] == 'private' or m['posting'] != 'anyone'
     j = {'call': call, 'name': m['name'], 'about': m.get('about', ''),
-         'kind': m.get('kind', 'chat'), 'shared': False,
+         'kind': m.get('kind', 'chat'), 'shared': m.get('shared', False)}
+    if m.get('shared'):
+        j['peers'], j['seen'] = m.get('peers', []), m.get('seen', [])
+    if m.get('mirrored'):
+        j['mirrored'], j['owner'] = True, m['owner']
+    j.update({
          'visibility': m['visibility'], 'posting': m['posting'], 'role': role,
-         'can_post': bool(who) and (not members_only or role in ('member', 'mod'))}
+         'can_post': bool(who) and (not members_only or role in ('member', 'mod'))})
     if role == 'invited':
         j['offer'] = 'b1b1b1'
     if admin or role == 'mod':
@@ -313,8 +318,18 @@ class H(BaseHTTPRequestHandler):
                                'kind': b.get('kind', 'chat'),
                                'posting': 'members' if vis == 'private' else b.get('posting', 'anyone')}
                 ROOM_ROLES[(call, ADMIN['call'])] = 'invited'
+            elif act == 'mirror':
+                ROOMS[call] = {'name': b.get('name') or call, 'about': '', 'kind': b.get('kind', 'forum'),
+                               'visibility': 'public', 'posting': 'anyone', 'mirrored': True, 'owner': b['owner']}
             elif call not in ROOMS:
                 return self._send(404, {'ok': False, 'error': 'no such room'})
+            elif act == 'share':
+                ROOMS[call]['shared'] = bool(b.get('shared'))
+                ROOMS[call]['peers'] = [p.upper() for p in b.get('peers', [])]
+            elif act == 'unmirror':
+                del ROOMS[call]
+            elif act == 'sync':
+                pass
             elif act == 'update':
                 for k in ('name', 'about', 'visibility', 'posting', 'kind'):
                     if k in b:

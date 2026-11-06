@@ -167,6 +167,17 @@ back as posts, never fragments. An author withdraws their own post, a
 room moderator deletes any. The administrator picks the kind when creating a
 room. The mock serves a forum room with `MOCK_FORUM=1`.
 
+A room can be shared between stations (XPRS.md 10.10.1). In Administration
+the owner ticks "Shared with other stations" on a room and names the peer
+stations, or leaves the list empty to let any station mirror a public room;
+the card then lists the stations that mirror it. "Mirror a room from another
+station" takes the room's `X5` callsign and the station that holds it: this
+station keeps a copy, asks the owner for what it filed (`sync`, and every
+minute when there is news), and the owner asks it back, so a post made on
+either side reaches the other. A mirrored room's card says so, offers "Sync
+now" and "Stop mirroring", and has no member controls: the mirror never signs
+as the room.
+
 ## Private messages
 
 "Private message" (the menu, or the People heading on the left) starts one

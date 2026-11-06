@@ -286,6 +286,16 @@ def main():
     check(st == 200 and d.get('id') == wid, 'the last part completes it: verified over the whole, filed', d)
     st, d = http('GET', '/api/rooms', query='topics=%s&session=%s' % (forum, carol.session))
     check(any(t.get('id') == wid for t in d.get('topics', [])), 'the index shows the whole, never a part', d)
+    # Sharing between stations (XPRS.md 10.10.1): the shapes; the exchange itself needs two stations.
+    st, d = alice.rooms('share', call=forum, shared=True, peers=['X3MIRR'])
+    sr = [r for r in d.get('rooms', []) if r['call'] == forum]
+    check(st == 200 and sr and sr[0].get('shared') is True and sr[0].get('peers') == ['X3MIRR'], 'the owner shares the room with a named station', d)
+    check(alice.rooms('sync', call=forum)[0] == 200, 'and may ask its peers now')
+    st, d = alice.rooms('mirror', call='X5M1RR', owner='X3OWNR', name='Theirs')
+    mr = [r for r in d.get('rooms', []) if r['call'] == 'X5M1RR']
+    check(st == 200 and mr and mr[0].get('mirrored') is True and mr[0].get('owner') == 'X3OWNR', 'a room another station holds is mirrored', d)
+    st, d = alice.rooms('unmirror', call='X5M1RR')
+    check(st == 200 and not any(r['call'] == 'X5M1RR' for r in d.get('rooms', [])), 'and let go')
     alice.rooms('close', call=forum)
 
     print('alerts')
