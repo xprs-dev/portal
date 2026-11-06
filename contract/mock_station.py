@@ -379,6 +379,18 @@ class H(BaseHTTPRequestHandler):
                     return self._send(403, {'ok': False, 'error': 'not a moderator here'})
                 SENT.append(wire)
                 return self._send(200, {'ok': True, 'id': 'abc123', 'wire': wire})
+            if wire.startswith('t:blog ') and ' d:' not in wire.split(' m:')[0]:
+                # A post to everybody (XPRS.md 18), aired as given: a part
+                # (7.6) carries no signature of its own, so none is asked of it.
+                f = wire.split(' f:')[1].split(' ')[0]
+                part = ' n:' in wire.split(' m:')[0] + ' '
+                if not part and ' sig:' not in wire:
+                    return self._send(400, {'ok': False, 'error': 'unsigned'})
+                SENT.append(wire)
+                ROWS.append({'id': 'b%05x' % len(SENT), 'ts': int(time.time()), 'bearer': 'lan',
+                             'rssi': 0, 'from': f, 'to': '', 'type': 'blog',
+                             'sig': 'unverified' if part else 'verified', 'own': False, 'wire': wire})
+                return self._send(200, {'ok': True, 'id': 'b%05x' % len(SENT), 'wire': wire})
             if wire.startswith('t:warning ') or wire.startswith('t:info '):
                 f = wire.split(' f:')[1].split(' ')[0]
                 if ' remove:' not in wire and SETTINGS['who_may_alert'] != 'everyone' \

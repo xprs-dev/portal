@@ -18,9 +18,7 @@ NUL-separated JSON), so no websocket module is needed:
 google-chrome, not the snap Chromium (it cannot reach 127.0.0.1).
 """
 import base64
-import json
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -32,57 +30,7 @@ PORT = 8784
 SHOTS = sys.argv[1] if len(sys.argv) > 1 else None
 
 
-class Cdp:
-    def __init__(self):
-        shutil.rmtree(PROF, ignore_errors=True)
-        os.makedirs(PROF, exist_ok=True)
-        to_chrome_r, self.w = os.pipe()
-        self.r, from_chrome_w = os.pipe()
-
-        # Chrome reads fd 3 and writes fd 4. The pipe ends may already be
-        # numbered 3 or 4, so both are moved out of the way first.
-        def fds():
-            a, b = os.dup(to_chrome_r), os.dup(from_chrome_w)
-            os.dup2(a, 3)
-            os.dup2(b, 4)
-        self.p = subprocess.Popen(
-            [BROWSER, '--headless=new', '--no-sandbox', '--disable-gpu',
-             '--remote-debugging-pipe', '--user-data-dir=' + PROF, 'about:blank'],
-            pass_fds=(3, 4, to_chrome_r, from_chrome_w), preexec_fn=fds,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        os.close(to_chrome_r)
-        os.close(from_chrome_w)
-        self.buf = b''
-        self.n = 0
-        self.session = None
-
-    def send(self, method, params=None, top=False):
-        self.n += 1
-        msg = {'id': self.n, 'method': method, 'params': params or {}}
-        if self.session and not top:
-            msg['sessionId'] = self.session
-        os.write(self.w, json.dumps(msg).encode() + b'\0')
-        while True:
-            while b'\0' not in self.buf:
-                chunk = os.read(self.r, 1 << 16)
-                if not chunk:
-                    raise RuntimeError('chrome went away')
-                self.buf += chunk
-            line, self.buf = self.buf.split(b'\0', 1)
-            m = json.loads(line)
-            if m.get('id') == self.n:
-                if 'error' in m:
-                    raise RuntimeError('%s: %s' % (method, m['error'].get('message')))
-                return m.get('result', {})
-
-    def eval(self, expr):
-        r = self.send('Runtime.evaluate', {'expression': expr, 'returnByValue': True})
-        return r.get('result', {}).get('value')
-
-    def close(self):
-        self.p.kill()
-        self.p.wait()
-
+from cdp import Cdp
 
 fails = 0
 
@@ -123,12 +71,9 @@ FIELD = "document.getElementById('txt').getBoundingClientRect().bottom"
 station = subprocess.Popen([sys.executable, os.path.join(ROOT, 'contract', 'mock_station.py'),
                             str(PORT)])
 time.sleep(1)
-c = Cdp()
+c = Cdp(BROWSER, PROF)
 try:
-    tid = c.send('Target.createTarget', {'url': 'about:blank'}, top=True)['targetId']
-    c.session = c.send('Target.attachToTarget', {'targetId': tid, 'flatten': True},
-                       top=True)['sessionId']
-    c.send('Page.enable')
+    c.attach()
 
     print('a phone, nothing over the page')
     phone(c)

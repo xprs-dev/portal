@@ -81,7 +81,8 @@ for board, port in ((False, 8781), (True, 8782)):
         check(admin_btn is not None and 'none' not in admin_btn.group(1),
               'the menu offers Administration')
         check(hidden('devices'), 'a tab the host does not serve is hidden')
-        check('data-r="f:X5F0RM"' in d, 'a forum room the station hosts is listed under Forum')
+        check('data-r="forum"' in d, 'the Feed lists Forum, beside Blog')
+        check('id="fab" class="fab hide"' in d, 'the round + is there, hidden in a chat room')
         check(not hidden('traffic'), 'a tab it serves stays')
         check(link is not None and link.group(1) == '' and link.group(2) == '/app',
               'Get the app links to the host\'s download page')

@@ -39,9 +39,22 @@
   (window height minus the visual viewport), and guesses the Android bars for
   a WebView drawn under them that reports no inset (page as tall as the
   screen). Goes with `park()`; any phone-sized page of ours wants both.
-- **`Cdp` in `test/layout_smoke.py`**: headless Chrome driven over the
-  DevTools protocol on a pipe (fds 3 and 4), no websocket module. Use it for
-  any browser test that needs device emulation or to run script in the page.
+- **`Cdp` in `test/cdp.py`**: headless Chrome driven over the DevTools
+  protocol on a pipe (fds 3 and 4), no websocket module: `attach()` a page,
+  `load(url)`, `eval(js)`, `wait(js, seconds)` polls until truthy. Used by
+  `layout_smoke.py` (device emulation) and `feed_smoke.py` (clicking through
+  the feeds); any browser test that runs script in the page starts here.
+- **`fabSet(mode)` / `fabClick()` / `closeComposer()`**: the round + of a
+  feed and the panel it opens at the top of the conversation column. A feed's
+  loader redraws only while no `#composer` is open, so a new feed with
+  something to add gets a mode, a form function, and that one guard.
+- **`roomCreateFrom(prefix, kind, done)`**: creates a station room from any
+  form whose fields are `prefix+name/about/vis/post`: the admin's New room
+  and the Forum's category panel share it; a third form would too.
+- **`splitSigned(head, text, cb)` and `postWires(wires, i, cb)`**: a long
+  packet as parts (7.6) signed once over the whole (9.1.1), posted one after
+  another. A forum topic, a reply and a post to everybody all go through them;
+  so would anything else the page lets a visitor write at length.
 - **`pick(name)` in `test/traffic_test.js` and `test/devices_test.js`**: lifts
   one function out of the page source by brace matching, so a page function is
   unit-tested in Node without a browser.

@@ -131,11 +131,14 @@ Alerts are a feed entry on the left, under Social: the active `t:warning` and
 `t:info` the station holds (XPRS.md 24, 25; active until `until:`, or a day,
 and not withdrawn), listed in the conversation column. The entry reads
 "Alerts (n)" while there are alerts this browser has not looked at, polled
-every thirty seconds. Posting one is "Post an alert" in the menu (top right),
-offered only to whom the station lets post (`page.alerts`, XPRS.md 10.10.2):
-the moderators and the administrator, or everyone; the form composes a signed
-warning (kind, severity, how long) or notice, and the author may withdraw
-their own.
+every thirty seconds. A feed has no composer bar: what there is to add goes
+through a round + at the bottom right of the conversation column, which opens
+a panel at the top of the feed and leaves it alone while it is open. On
+Alerts the + is offered only to whom the station lets post (`page.alerts`,
+XPRS.md 10.10.2): the moderators and the administrator, or everyone; the panel
+composes a signed warning (kind, severity, how long) or notice, and the author
+may withdraw their own. "Post an alert" in the menu (top right) opens the same
+form with the active alerts under it.
 
 Blog is the next feed entry: the `t:blog` posts the station holds (XPRS.md
 18), newest first, as cards with the title, the text, the author and the
@@ -143,16 +146,25 @@ tags. A long post arrives split (7.6) and the archive keeps the parts, so the
 page joins them, keyed on author and timestamp (6.6), and never shows one
 with a part missing. A later post with the same title from the same author
 replaces the earlier (18.1) and reads as edited. The entry counts the posts
-this browser has not looked at, polled every thirty seconds. Posts are
-published from the app: a visitor cannot send `t:blog` through the station
-(`WebChatApi.postable`), so the composer is off in this feed.
-`test/blog_test.js` checks the fold.
+this browser has not looked at, polled every thirty seconds. The + writes a
+post: a title that becomes a label (18.1) and up to about 1500 characters,
+signed by the visitor and sent through `/api/xprs/send` as one packet or as
+parts (`splitSigned()`, the same as a forum topic). A station airs each part
+as given, so nothing is asked of it beyond the spec: a part carries no
+signature of its own and the page joins the set and judges the whole. A whole
+post filed by a station that joined the parts itself outranks the parts in
+the fold. `test/blog_test.js` checks the fold.
 
 ## Forum rooms
 
-A station room of kind `forum` (XPRS.md 18.5; `kind` on `/api/rooms`) is
-listed under a Forum head in the left column. Its posts are `t:blog` to the
-room: a titled post opens a topic, replaced by a later one of the same title
+Forum is always on the left column, beside Blog. It opens on the station's
+forum categories: each a station room of kind `forum` (XPRS.md 18.5; `kind`
+on `/api/rooms`), drawn as a card, one click to open. The administrator sees a
+round + at the bottom right of the Forum and of a category's topic list; on
+the Forum it opens a panel that creates a category (name, about, visibility,
+who posts), the same `create` on `/api/rooms` as Administration's New room,
+with the kind set. A visitor sees who creates categories, or that the station
+has no administrator yet. Its posts are `t:blog` to the room: a titled post opens a topic, replaced by a later one of the same title
 from its author; an untitled post naming it with `r:` is a comment. The room
 shows its topics as cards from `/api/rooms?topics=<call>` (title, author,
 replies, last activity), a topic as the opening post with its comments from

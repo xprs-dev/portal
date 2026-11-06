@@ -251,6 +251,7 @@ def main():
     check(any('hello room %d' % seed in r.get('wire', '') for r in bob.history(kind='message', room=room, limit='50').get('rows', [])), 'but to its member')
     st, _ = alice.send('t:moderate f:%s d:%s ts:%s revoke:%s' % (alice.call, room, ts(), bob.call))
     check(st == 200 and bob.send('t:message f:%s d:%s ts:%s m:again' % (bob.call, room, ts()))[0] == 403, 'a room moderator sends bob away')
+    check(bob.send('t:blog f:%s d:%s ts:%s title:x m:y' % (bob.call, room, ts()))[0] == 403, 'a chat room takes no post')
     st, d = alice.rooms('close', call=room)
     check(st == 200 and not any(r['call'] == room for r in d.get('rooms', [])), 'closed')
 
@@ -265,7 +266,6 @@ def main():
     topic = d.get('id', '')
     check(carol.send('t:blog f:%s d:%s ts:%s m:no title and no r:' % (carol.call, forum, ts()))[0] == 400,
           'a post with neither a title nor r: is refused')
-    check(bob.send('t:blog f:%s d:%s ts:%s title:x m:y' % (bob.call, room, ts()))[0] in (403, 404), 'a chat room takes no post')
     st, d = carol.send('t:blog f:%s d:%s ts:%s r:%s m:A 1:1 current balun.' % (carol.call, forum, ts(1), topic))
     check(st == 200, 'carol comments: an untitled post naming the topic', d)
     st, d = http('GET', '/api/rooms', query='topics=%s&session=%s' % (forum, carol.session))
@@ -286,6 +286,25 @@ def main():
     check(st == 200 and d.get('id') == wid, 'the last part completes it: verified over the whole, filed', d)
     st, d = http('GET', '/api/rooms', query='topics=%s&session=%s' % (forum, carol.session))
     check(any(t.get('id') == wid for t in d.get('topics', [])), 'the index shows the whole, never a part', d)
+    # A post to everybody (XPRS.md 18), from the page: one packet signed, or
+    # parts each aired as given (API-HTTP.md, /api/xprs/send), the page joins them.
+    one = sign(bob.priv, 't:blog f:%s ts:%s title:short-%d m:Fits one packet.' % (bob.call, ts(3), seed)).strip()
+    check(http('POST', '/api/xprs/send', {'wire': one})[0] == 200, 'a signed post to everybody is aired')
+    head = 't:blog f:%s ts:%s title:long-%d' % (bob.call, ts(4), seed)
+    sig = sign(bob.priv, head + ' m:first half second half').strip().split(' sig:')[1].split(' ')[0]
+    check(http('POST', '/api/xprs/send', {'wire': head + ' n:1/2 m:first half'})[0] == 200, 'a part goes out as given, unsigned')
+    check(http('POST', '/api/xprs/send', {'wire': head + ' n:2/2 sig:%s m:second half' % sig})[0] == 200, 'and the last, signed over the whole')
+    ws = []
+    for _ in range(30):   # the archive files in batches
+        st, d = http('GET', '/api/xprs/history', query='kind=blog&limit=200')
+        ws = [r.get('wire', '') for r in d.get('rows', [])]
+        if any(w.startswith(head + ' n:2/2') for w in ws):
+            break
+        time.sleep(1)
+    check(any(w.startswith(head + ' n:1/2') for w in ws) and any(w.startswith(head + ' n:2/2') for w in ws),
+          'both parts are in the blog feed within thirty seconds, for the page to join', [head] + [w for w in ws if 'long-' in w])
+    check(http('POST', '/api/xprs/send', {'wire': 't:blog f:%s ts:%s title:bare-%d m:unsigned' % (bob.call, ts(5), seed)})[0] == 400,
+          'an unsigned post that is not a part is refused')
     # Sharing between stations (XPRS.md 10.10.1): the shapes; the exchange itself needs two stations.
     st, d = alice.rooms('share', call=forum, shared=True, peers=['X3MIRR'])
     sr = [r for r in d.get('rooms', []) if r['call'] == forum]
