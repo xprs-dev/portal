@@ -52,6 +52,7 @@ def room_json(call, who, admin):
     role = ROOM_ROLES.get((call, who), 'none')
     members_only = m['visibility'] == 'private' or m['posting'] != 'anyone'
     j = {'call': call, 'name': m['name'], 'about': m.get('about', ''),
+         'kind': m.get('kind', 'chat'), 'shared': False,
          'visibility': m['visibility'], 'posting': m['posting'], 'role': role,
          'can_post': bool(who) and (not members_only or role in ('member', 'mod'))}
     if role == 'invited':
@@ -60,6 +61,51 @@ def room_json(call, who, admin):
         for r, k in (('member', 'members'), ('mod', 'moderators'), ('invited', 'invited')):
             j[k] = sorted(c for (g, c), v in ROOM_ROLES.items() if g == call and v == r)
     return j
+if os.environ.get('MOCK_FORUM'):
+    # A forum room (XPRS.md 18.5) with a topic and a comment on it.
+    ROOMS['X5F0RM'] = {'name': 'Radio', 'about': 'antennas and such', 'kind': 'forum',
+                       'visibility': 'public', 'posting': 'anyone'}
+    ROWS.append({'id': '5f2c1a', 'ts': int(time.time()) - 900, 'bearer': 'web', 'rssi': 0,
+                 'from': 'X1RD89', 'to': 'X5F0RM', 'type': 'blog', 'sig': 'verified', 'own': False,
+                 'wire': 't:blog f:X1RD89 d:X5F0RM ts:2026-08-08_16:02:10 title:balun-question tag:radio '
+                         'm:Which balun did the dipole get, and did it matter?'})
+    ROWS.append({'id': '9b7e44', 'ts': int(time.time()) - 300, 'bearer': 'web', 'rssi': 0,
+                 'from': 'X1QZ3N', 'to': 'X5F0RM', 'type': 'blog', 'sig': 'verified', 'own': False,
+                 'wire': 't:blog f:X1QZ3N d:X5F0RM ts:2026-08-08_16:40:00 r:5f2c1a '
+                         'm:A 1:1 current balun. It was the wire, not the balun.'})
+
+
+def forum_topics(room):
+    """The index: titled posts, newest edition per author and title, replies counted."""
+    posts = [r for r in ROWS if r['to'] == room and r['type'] == 'blog'
+             and r.get('id') not in REMOVED and r['from'] not in AWAY]
+    topics = {}
+    for r in sorted(posts, key=lambda r: r['ts']):
+        head = r['wire'].split(' m:')[0] + ' '
+        if ' title:' not in head or ' remove:' in head:
+            continue
+        if ' n:' in head and ' n:1/' not in head:
+            continue    # the mock files parts as rows; the first stands for the post
+        title = head.split(' title:')[1].split(' ')[0]
+        prev = topics.get((r['from'], title))
+        topics[(r['from'], title)] = {
+            'id': r['id'], 'title': title, 'from': r['from'], 'ts': r['ts'], 'replies': 0,
+            'last': r['ts'], 'edited': prev is not None, 'ids': (prev['ids'] if prev else []) + [r['id']]}
+    for r in posts:
+        head = r['wire'].split(' m:')[0] + ' '
+        if ' title:' in head or ' r:' not in head or ' remove:' in head:
+            continue
+        ref = (head.split(' root:')[1] if ' root:' in head else head.split(' r:')[1]).split(' ')[0]
+        for t in topics.values():
+            if ref in t['ids']:
+                t['replies'] += 1
+                t['last'] = max(t['last'], r['ts'])
+    out = sorted(topics.values(), key=lambda t: -t['last'])[:100]
+    for t in out:
+        del t['ids']
+    return out
+
+
 # /api/admin (the rules are WebChatApi's, tested in the core; this answers
 # the shapes). MOCK_REMOTE makes every visitor one from the internet.
 ADMIN = {'call': None}
@@ -153,6 +199,13 @@ class H(BaseHTTPRequestHandler):
                              'uptime_s': 60})
         elif u.path == '/api/admin':
             self._send(200, admin_state((parse_qs(u.query).get('session') or [''])[0]))
+        elif u.path == '/api/rooms' and (parse_qs(u.query).get('topics') or [''])[0]:
+            room = parse_qs(u.query)['topics'][0]
+            if room not in ROOMS:
+                return self._send(404, {'ok': False, 'error': 'no such room'})
+            if ROOMS[room].get('kind') != 'forum':
+                return self._send(400, {'ok': False, 'error': 'not a forum room'})
+            self._send(200, {'ok': True, 'room': room, 'topics': forum_topics(room)})
         elif u.path == '/api/rooms':
             tok = (parse_qs(u.query).get('session') or [''])[0]
             who, admin = SESSIONS.get(tok), SESSIONS.get(tok) == ADMIN['call']
@@ -179,8 +232,19 @@ class H(BaseHTTPRequestHandler):
                 rows = [r for r in rows if r['to'] == room]
             elif room:
                 rows = [r for r in rows if room_of(r) == room]
+            else:
+                # The general listing is the undirected shelf: a hosted room's
+                # rows are read by room= only, as the real engine serves them.
+                rows = [r for r in rows if not r['to'].startswith('X5')]
             rows = [r for r in rows if r.get('id') not in REMOVED and r['from'] not in AWAY]
             rows.sort(key=lambda r: -r['ts'])
+            root = (q.get('root') or [''])[0]
+            if root:
+                # A thread (XPRS.md 7.4, 18.5): the post and what names it, oldest first.
+                def names(r):
+                    head = r['wire'].split(' m:')[0] + ' '
+                    return r.get('id') == root or (' r:%s ' % root) in head or (' root:%s ' % root) in head
+                rows = [r for r in rows if names(r)][::-1]
             rows = rows[:int((q.get('limit') or ['30'])[0])]
             self._send(200, {'ok': True, 'count': len(rows), 'held': len(ROWS),
                              'time': 'synced', 'rows': rows,
@@ -246,12 +310,13 @@ class H(BaseHTTPRequestHandler):
                 call = 'X5R%03X' % ROOM_N[0]
                 vis = b.get('visibility', 'public')
                 ROOMS[call] = {'name': b['name'], 'about': b.get('about', ''), 'visibility': vis,
+                               'kind': b.get('kind', 'chat'),
                                'posting': 'members' if vis == 'private' else b.get('posting', 'anyone')}
                 ROOM_ROLES[(call, ADMIN['call'])] = 'invited'
             elif call not in ROOMS:
                 return self._send(404, {'ok': False, 'error': 'no such room'})
             elif act == 'update':
-                for k in ('name', 'about', 'visibility', 'posting'):
+                for k in ('name', 'about', 'visibility', 'posting', 'kind'):
                     if k in b:
                         ROOMS[call][k] = b[k]
                 if ROOMS[call]['visibility'] == 'private':
@@ -318,9 +383,14 @@ class H(BaseHTTPRequestHandler):
                 if (m['visibility'] == 'private' or m['posting'] != 'anyone') \
                         and ROOM_ROLES.get((g, f)) not in ('member', 'mod'):
                     return self._send(403, {'ok': False, 'error': 'only members post in this room'})
+                typ = wire[2:wire.index(' ')]
+                if typ == 'blog' and m.get('kind') != 'forum':
+                    return self._send(403, {'ok': False, 'error': 'posts go in a forum room'})
                 SENT.append(wire)
+                # The mock files a part as a row like any other (the real engine
+                # holds a split post until its last part verifies, 9.1.1).
                 ROWS.append({'id': 'r%05x' % len(SENT), 'ts': int(time.time()), 'bearer': 'web',
-                             'rssi': 0, 'from': f, 'to': g, 'type': 'message',
+                             'rssi': 0, 'from': f, 'to': g, 'type': typ,
                              'sig': 'verified', 'own': False, 'wire': wire})
                 return self._send(200, {'ok': True, 'id': 'r%05x' % len(SENT), 'wire': wire})
             if wire.startswith('t:moderate '):

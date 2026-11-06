@@ -17,6 +17,12 @@
   joins split parts keyed on `(f, ts)` (6.6), drops a set with a hole, keeps
   the newest edition per author and `title:` (18.1). Events (26) replace by
   title the same way, so an Events feed would reuse it with `t:event`.
+- **`splitSigned(head, text, cb)`**: a long text as up to nine packets split
+  at spaces (7.6), signed once over the whole with the signature on the last
+  part (9.1.1), or one signed packet when it fits. The forum uses it for
+  topics and comments; the chat composer could use it for a long message
+  instead of refusing one. `postWires()` sends them one after another.
+- **`slugOf(text)`**: a label (18.1) from free text.
 - **`distCell(v)`**: the Distance cell for a devices row -- the sum when the
   station could add the legs up, the first leg as a floor (`>~12 m`) when the
   relay has not said, the relay's name beside it. Anything that prints a

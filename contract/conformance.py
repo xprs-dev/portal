@@ -254,6 +254,40 @@ def main():
     st, d = alice.rooms('close', call=room)
     check(st == 200 and not any(r['call'] == room for r in d.get('rooms', [])), 'closed')
 
+    print('forum rooms')
+    st, d = alice.rooms('create', name='Radio %d' % seed, kind='forum', visibility='public', posting='anyone')
+    check(st == 200 and d.get('room', '').startswith('X5'), 'the administrator creates a forum room', d)
+    forum = d.get('room', '')
+    fr = [r for r in d.get('rooms', []) if r['call'] == forum]
+    check(bool(fr) and fr[0].get('kind') == 'forum', 'listed with kind forum', fr)
+    st, d = bob.send('t:blog f:%s d:%s ts:%s title:balun-%d tag:radio m:Which balun did the dipole get?' % (bob.call, forum, ts(), seed))
+    check(st == 200, 'bob opens a topic: a titled post to the room', d)
+    topic = d.get('id', '')
+    check(carol.send('t:blog f:%s d:%s ts:%s m:no title and no r:' % (carol.call, forum, ts()))[0] == 400,
+          'a post with neither a title nor r: is refused')
+    check(bob.send('t:blog f:%s d:%s ts:%s title:x m:y' % (bob.call, room, ts()))[0] in (403, 404), 'a chat room takes no post')
+    st, d = carol.send('t:blog f:%s d:%s ts:%s r:%s m:A 1:1 current balun.' % (carol.call, forum, ts(1), topic))
+    check(st == 200, 'carol comments: an untitled post naming the topic', d)
+    st, d = http('GET', '/api/rooms', query='topics=%s&session=%s' % (forum, carol.session))
+    tp = [t for t in d.get('topics', []) if t.get('id') == topic]
+    check(st == 200 and bool(tp) and tp[0].get('replies') == 1 and tp[0].get('title') == 'balun-%d' % seed,
+          'the index lists the topic with one reply', d)
+    th = carol.history(room=forum, kind='blog', root=topic, limit='50').get('rows', [])
+    check(len(th) == 2 and 'title:balun' in th[0].get('wire', '') and (' r:%s' % topic) in th[1].get('wire', ''),
+          'the thread: the post, then the comment', th)
+    # A split post (XPRS.md 7.6), signed once over the whole on its last part (9.1.1).
+    head = 't:blog f:%s d:%s ts:%s title:split-%d' % (bob.call, forum, ts(2), seed)
+    whole = sign(bob.priv, head + ' m:first half second half').strip()
+    sig = whole.split(' sig:')[1].split(' ')[0]
+    wid = wire_id(head + ' m:first half second half').strip()
+    st, d = http('POST', '/api/xprs/send', {'wire': head + ' n:1/2 m:first half'})
+    check(st == 202, 'the first part of a split post is held', d)
+    st, d = http('POST', '/api/xprs/send', {'wire': head + ' n:2/2 sig:%s m:second half' % sig})
+    check(st == 200 and d.get('id') == wid, 'the last part completes it: verified over the whole, filed', d)
+    st, d = http('GET', '/api/rooms', query='topics=%s&session=%s' % (forum, carol.session))
+    check(any(t.get('id') == wid for t in d.get('topics', [])), 'the index shows the whole, never a part', d)
+    alice.rooms('close', call=forum)
+
     print('alerts')
     check(carol.send('t:warning f:%s kind:outage sev:watch ts:%s until:%s m:conformance' % (carol.call, ts(), ts(600)))[0] == 403,
           'by default a visitor may not post an alert')

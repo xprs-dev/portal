@@ -37,6 +37,8 @@ def station(port, board, flood=False):
     env = dict(os.environ)
     if board:
         env['MOCK_BOARD'] = '1'
+    else:
+        env['MOCK_FORUM'] = '1'
     if flood:
         env['MOCK_FLOOD'] = '1'
     p = subprocess.Popen([sys.executable, os.path.join(ROOT, 'contract', 'mock_station.py'),
@@ -79,6 +81,7 @@ for board, port in ((False, 8781), (True, 8782)):
         check(admin_btn is not None and 'none' not in admin_btn.group(1),
               'the menu offers Administration')
         check(hidden('devices'), 'a tab the host does not serve is hidden')
+        check('data-r="f:X5F0RM"' in d, 'a forum room the station hosts is listed under Forum')
         check(not hidden('traffic'), 'a tab it serves stays')
         check(link is not None and link.group(1) == '' and link.group(2) == '/app',
               'Get the app links to the host\'s download page')

@@ -148,6 +148,25 @@ published from the app: a visitor cannot send `t:blog` through the station
 (`WebChatApi.postable`), so the composer is off in this feed.
 `test/blog_test.js` checks the fold.
 
+## Forum rooms
+
+A station room of kind `forum` (XPRS.md 18.5; `kind` on `/api/rooms`) is
+listed under a Forum head in the left column. Its posts are `t:blog` to the
+room: a titled post opens a topic, replaced by a later one of the same title
+from its author; an untitled post naming it with `r:` is a comment. The room
+shows its topics as cards from `/api/rooms?topics=<call>` (title, author,
+replies, last activity), a topic as the opening post with its comments from
+`/api/xprs/history?room=<call>&kind=blog&root=<id>`, and the composer
+replies while a topic is open. A new topic is a form above the list: the
+title becomes a label, the text up to about 1500 characters. A post longer
+than one packet is split at spaces into up to nine parts (7.6) and signed
+once over the whole, the signature carried on the last part (9.1.1), which
+`splitSigned()` does for topics and comments alike; the station holds the
+parts and files the whole once the last one verifies it, so a thread reads
+back as posts, never fragments. An author withdraws their own post, a
+room moderator deletes any. The administrator picks the kind when creating a
+room. The mock serves a forum room with `MOCK_FORUM=1`.
+
 ## Private messages
 
 "Private message" (the menu, or the People heading on the left) starts one
