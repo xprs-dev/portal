@@ -114,8 +114,7 @@ def forum_topics(room):
 # /api/admin (the rules are WebChatApi's, tested in the core; this answers
 # the shapes). MOCK_REMOTE makes every visitor one from the internet.
 ADMIN = {'call': None}
-SETTINGS = {'local_private': True, 'who_may_post': 'everyone', 'who_may_alert': 'moderators',
-            'banner': ''}
+SETTINGS = {'local_private': True, 'who_may_post': 'everyone', 'who_may_alert': 'moderators'}
 LOCAL = not os.environ.get('MOCK_REMOTE')
 
 
@@ -199,7 +198,8 @@ class H(BaseHTTPRequestHandler):
         elif u.path == '/api/services':
             sv = dict(SERVICES)
             if 'page' in sv:   # what the administrator set, as the station reports it
-                sv['page'] = dict(sv['page'], alerts=SETTINGS['who_may_alert'], banner=SETTINGS['banner'])
+                sv['page'] = dict(sv['page'], alerts=SETTINGS['who_may_alert'],
+                                  **{k[5:]: v for k, v in SETTINGS.items() if k.startswith('page_')})
             self._send(200, sv)
         elif u.path == '/api/session':
             self._send(200, {'ok': True, 'nonce': NONCE})
@@ -307,7 +307,11 @@ class H(BaseHTTPRequestHandler):
                 if act == 'release':
                     ADMIN['call'] = None
                 else:
-                    SETTINGS.update(b.get('settings') or {})
+                    for k, v in (b.get('settings') or {}).items():
+                        if k.startswith('page_') and v == '':
+                            SETTINGS.pop(k, None)   # emptied: gone
+                        else:
+                            SETTINGS[k] = v
             return self._send(200, admin_state(b.get('session')))
         if path == '/api/rooms':
             b = json.loads(body or '{}')

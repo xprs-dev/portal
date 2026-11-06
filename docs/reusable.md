@@ -47,11 +47,11 @@
 - **`test/shots.py`**: screenshots of every feed and panel (desktop, phone,
   landscape) against the mock, claimed as administrator, into a directory:
   the way to look at a change before deciding it looks right.
-- **`drawBanner()` with `bannerHtml` and `xprs_banner`**: a block of the
-  station's HTML under the header, minimized or open per browser, the page's
-  own text when the station has none. Any other
-  per-station notice the page should carry can ride the same setting path
-  (`page.<name>` on `/api/services`, a setting on `/api/admin`).
+- **`page_<name>` settings** (`applyCss()`, `applyLogo()`, `drawBanner()`):
+  anything the page lets the administrator set about itself is a string the
+  station stores under `page_<name>` and reports as `page.<name>`, with no
+  station-side meaning. A new one is a textarea in Administration, a line in
+  `applyServices()` and a line in `adminSet()`; nothing on the server.
 - **`fabSet(mode)` / `fabClick()` / `closeComposer()`**: the round + of a
   feed and the panel it opens at the top of the conversation column. A feed's
   loader redraws only while no `#composer` is open, so a new feed with

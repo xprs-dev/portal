@@ -156,13 +156,26 @@ the fold. `test/blog_test.js` checks the fold.
 
 ## The banner, and the logo
 
-Under the header the page shows the station's banner: HTML its administrator
-writes in Administration (the `banner` setting on `/api/admin`, at most 4000
-characters; `page.banner` on `/api/services` carries it to every visitor).
-The station holds a string and nothing more: empty, the page shows its own
-text about what a station is (`BANNER_DEFAULT`), which the Default button
-puts back; a banner with no text in it, `<!-- none -->`, shows nothing. It is
-the administrator's own HTML, trusted as the station is. The arrow on it
+What the page lets the administrator set about itself goes through one rule
+on the station: a setting named `page_<name>` on `/api/admin` is a string of
+at most 8000 characters, stored as given and reported as `page.<name>` on
+`/api/services`, gone when set to empty. The station knows nothing of what
+the names mean, so a new one costs it nothing. The page uses three:
+
+- `page_banner`: HTML under the header for every visitor. Empty, the page
+  shows its own text about what a station is (`BANNER_DEFAULT`), which the
+  Default button puts back; a banner with no text in it, `<!-- none -->`,
+  shows nothing.
+- `page_logo`: HTML in place of the XPRS lettering at the top left, an image
+  or text; it still goes home on a click.
+- `page_css`: a stylesheet added after the page's own, in `<style id="st-css">`;
+  the colours are custom properties on `:root` (`--accent`, `--bg`, `--text`,
+  `--muted`, `--border`), so a colour scheme is one line.
+
+All three are in Administration, under Banner and Look, take effect in the
+administrator's own page at once and reach other visitors on their next load.
+They are the administrator's own HTML and CSS, trusted as the station is.
+The arrow on the banner
 minimizes it to its first line and opens it again; the choice is kept in this
 browser (`xprs_banner`). Open, it scrolls past about a quarter of the screen,
 a third on a phone held sideways. The XPRS logo at the top left goes back to

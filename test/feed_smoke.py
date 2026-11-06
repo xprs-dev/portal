@@ -95,10 +95,16 @@ try:
     c.eval("document.getElementById('ad-claim').click()")
     check(c.wait("isStationAdmin===true", 10), 'claimed')
     check(c.wait("!!document.getElementById('ad-banner')", 5), 'Administration has the banner card')
-    c.eval("document.getElementById('ad-banner').value='<b>Hill station</b> on air';adminSet({banner:document.getElementById('ad-banner').value})")
+    c.eval("document.getElementById('ad-banner').value='<b>Hill station</b> on air';adminSet({page_banner:document.getElementById('ad-banner').value})")
     check(c.wait("document.getElementById('bn-body').innerText.indexOf('Hill station')>=0", 5), 'the administrator writes the banner')
+    c.eval("adminSet({page_css:':root{--accent:#6fc3ff}'});adminSet({page_logo:'<span>HILL</span>'})")
+    check(c.wait("document.getElementById('logo').innerText==='HILL'&&getComputedStyle(document.querySelector('#side .room.on')).color==='rgb(111, 195, 255)'", 5),
+          'and the logo and the stylesheet, which take effect at once')
     c.load('http://127.0.0.1:%d/' % PORT)
-    check(c.wait("document.getElementById('bn-body').innerText.indexOf('Hill station')>=0", 5), 'and every visitor gets it from the station')
+    check(c.wait("document.getElementById('bn-body').innerText.indexOf('Hill station')>=0&&document.getElementById('logo').innerText==='HILL'&&document.getElementById('st-css').textContent.indexOf('6fc3ff')>=0", 5),
+          'and every visitor gets all three from the station')
+    c.eval("adminSet({page_logo:''});adminSet({page_css:''})")
+    check(c.wait("document.getElementById('logo').innerText==='XPRS'", 5), 'emptied, the logo is XPRS again')
     c.eval("showTab('chat');switchRoom('forum')")
     check(c.wait("fabMode==='category'&&" + fab + "!=='none'"), 'the + offers a new category to the administrator')
     c.eval("fabClick()")
