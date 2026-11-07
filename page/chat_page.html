@@ -885,7 +885,7 @@ function ensureSession(tries){
       x.onload=function(){
         var j=null;try{j=JSON.parse(x.responseText);}catch(e){}
         if(x.status===200&&j&&j.session){
-          sess=j.session;chatLoaded=false;load();
+          sess=j.session;chatLoaded=false;chatDeep=false;load();
           if(tab==='admin')loadAdmin();
           if(canModerate)loadMyRole();
           if(canRooms)loadRooms();
@@ -1610,17 +1610,28 @@ function backfillRooms(){
     });
   })(0);
 }
+var loadBusy=false,chatDeep=false;
 function load(){
+  // Every three seconds, and never two at once: a station without PSRAM
+  // serves 200 rows in five seconds, and a page that asked for them every
+  // three seconds with a four-second timeout queued abandoned requests at
+  // its single-threaded server until nothing was answered at all ("connecting"
+  // forever on the T-Dongle). So: the newest 40 first, which every board
+  // answers in under a second, then once the full 200 in the background
+  // (render() files rows by time and skips ones it has), then 40 a tick.
+  if(loadBusy)return;
+  loadBusy=true;
   try{
     var x=new XMLHttpRequest();
-    // The whole conversation once, then only the newest: this runs every three
-    // seconds, and every read holds the archive against its writer.
+    var deep=chatLoaded&&!chatDeep;
     x.open('GET','/api/xprs/history?kind=message,reaction,status&limit='+
-           (chatLoaded?40:200)+(sess?'&session='+sess:''),true);
-    x.timeout=4000;
+           (deep?200:40)+(sess?'&session='+sess:''),true);
+    x.timeout=deep?20000:8000;
+    x.onloadend=function(){loadBusy=false;};
     x.onload=function(){
       try{
         var d=JSON.parse(x.responseText);
+        if(deep)chatDeep=true;
         chatLoaded=true;
         if(d.moderation)applyModeration(d.moderation);
         var rows=(d.rows||[]).slice().reverse();
@@ -1634,7 +1645,7 @@ function load(){
       }catch(e){}
     };
     x.send();
-  }catch(e){}
+  }catch(e){loadBusy=false;}
 }
 
 // ---- the other four tabs -------------------------------------------------
