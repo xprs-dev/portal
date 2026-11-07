@@ -5,8 +5,10 @@
 
   - a feed has no composer bar; a round + at the bottom right, offered to
     whom may add something there, opens a panel at the top of the feed;
-  - Blog: the + writes a post, sent as parts past one packet, and the feed
-    shows it joined;
+  - Blog: the + writes a post beside its preview, sent as parts past one
+    packet; the feed shows it at once, while the station's archive (held back
+    here as a real one batches its writes) has not filed it, then joined from
+    the archive; an image goes to the station by its reference;
   - Forum: always on the left; it opens on the categories, one click to a
     category's topics and a way back; the administrator's + creates one.
 """
@@ -35,7 +37,7 @@ def check(ok, what, extra=None):
 env = dict(os.environ)
 env['MOCK_FORUM'] = '1'
 station = subprocess.Popen([sys.executable, os.path.join(ROOT, 'contract', 'mock_station.py'),
-                            str(PORT)], env=env)
+                            str(PORT), '6'], env=env)
 time.sleep(1)
 c = Cdp(BROWSER, PROF)
 try:
@@ -101,14 +103,41 @@ try:
     check(c.eval("!!document.querySelector('#side .room[data-r=\"forum\"]')"), 'Forum is on the left, beside Blog')
     c.eval("fabClick()")
     check(c.wait("!!document.getElementById('bl-title')"), 'the + opens the post panel at the top of the feed')
-    text = ' '.join(['The mast went up at nine and the first contact was a station two valleys over.'] * 6)
-    c.eval("document.getElementById('bl-title').value='Field day';document.getElementById('bl-text').value=%r" % text)
+    check(c.eval("!!document.getElementById('bl-prev')&&!!document.querySelector('.mdtools')"), 'the panel has the toolbar and a preview')
+    para = ' '.join(['The mast went up at nine and the first contact was a station two valleys over.'] * 3)
+    text = '## Report\n\n**' + para + '**\n\n- one\n- two\n\n' + para
+    c.eval("document.getElementById('bl-title').value='Field day';document.getElementById('bl-text').value=%r;mdLive('bl',true)" % text)
+    check(c.eval("var v=document.getElementById('bl-prev');!!v.querySelector('h4')&&!!v.querySelector('strong')&&v.querySelectorAll('li').length===2"),
+          'the preview draws the heading, the bold and the list')
+    check(c.eval("/of 9 packets/.test(document.getElementById('bl-count').textContent)"), 'the counter says how many packets')
+    # A one-pixel PNG: hashed here, shown from the browser's copy, stored on the station by reference.
+    c.eval("""(function(){var b=atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='),
+      u=new Uint8Array(b.length);for(var i=0;i<b.length;i++)u[i]=b.charCodeAt(i);
+      window._ref=refOf(u,'png');mdInsert('bl','![dot]('+_ref+')');mdUpload(_ref,u,'image/png');})()""")
+    check(c.wait("mdUploading===0", 10), 'the image went to the station')
+    check(c.eval("_ref.length===47&&!!document.querySelector('#bl-prev img[data-ref=\"'+_ref+'\"]')"), 'and the preview shows it')
+    t0 = time.time()
     c.eval("blogPublish()")
-    check(c.wait("!document.getElementById('composer')&&blogs.some(function(p){return p.title==='field-day';})", 15),
-          'published: the feed shows the post, joined from its parts')
-    check(c.eval("blogs.filter(function(p){return p.title==='field-day';})[0].text.length") == len(text),
-          'the whole text came back')
+    check(c.wait("!document.getElementById('composer')&&!!document.querySelector('#msgs .post.pend')", 3),
+          'the post is on the feed at once', round(time.time() - t0, 2))
+    check(c.wait("!!document.querySelector('#msgs .post.pend.sent')", 5), 'and marked published when the station took it')
+    check(c.eval("!blogs.some(function(p){return p.title==='field-day';})"), 'while the archive has not filed it yet')
+    check(c.wait("!document.querySelector('#msgs .post.pend')&&blogs.some(function(p){return p.title==='field-day';})", 20),
+          'the archive files it and the feed shows it joined from its parts')
+    check(c.eval("blogs.filter(function(p){return p.title==='field-day';})[0].text.indexOf('\\u2029')>=0"),
+          'its paragraphs travelled as U+2029')
+    check(c.eval("var b=document.querySelector('#msgs .post .body.md');!!b.querySelector('h4')&&!!b.querySelector('li')"),
+          'and the card draws the formatting')
+    check(c.wait("var i=document.querySelector('#msgs .post img.mdimg');!!i&&i.complete&&i.naturalWidth===1", 5),
+          'the image loads from the station by its reference')
+    check(c.eval("pendingPosts.length") == 0, 'nothing is left pending')
     check(c.eval("document.querySelectorAll('#msgs .post').length") >= 2, 'the post is drawn with the mock\'s')
+    # A refusal keeps the post, with a way to try again.
+    c.eval("var _pw=postWire;postWire=function(w,cb){cb(false,'radio busy');};fabClick();"
+           "document.getElementById('bl-title').value='Second';document.getElementById('bl-text').value='short one';blogPublish()")
+    check(c.wait("!!document.querySelector('#msgs .post.pend.failed')", 3), 'a refused post stays, marked not sent')
+    c.eval("postWire=_pw;document.querySelector('#msgs .post.pend.failed button').click()")
+    check(c.wait("!!document.querySelector('#msgs .post.pend.sent')", 5), 'Retry sends it')
 
     print('Alerts and Forum, as a visitor')
     c.eval("switchRoom('alerts')")

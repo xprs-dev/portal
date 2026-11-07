@@ -17,8 +17,11 @@ administrator is claimed once, from the network; settings; moderators are
 appointed, accept with their own signature, remove messages and send people
 away, and the station enforces that on history and send; hosted rooms are
 created, listed by visibility, joined by acceptance, posted to and filed;
-alerts are gated by the setting.
+alerts are gated by the setting; files by reference, where the station
+says it keeps them, are stored only under their own hash and served back.
 """
+import base64
+import hashlib
 import json
 import os
 import subprocess
@@ -76,6 +79,22 @@ def http(method, path, body=None, query=''):
             req = urllib.request.Request(url, data=data, method=method)
             if data is not None:
                 req.add_header('Content-Type', 'application/json')
+
+
+def files(caps):
+    """GET/POST /api/xprs/file/<ref> (API-HTTP.md, XPRS.md 7.7)."""
+    data = os.urandom(512)
+    ref = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).decode().rstrip('=') + '.png'
+    check(caps.get('max', 0) >= 512, 'it says how large a file it keeps', caps)
+    check(http('GET', '/api/xprs/file/' + ref)[0] == 404, 'a file it does not hold is 404')
+    check(http('POST', '/api/xprs/file/' + ref, os.urandom(512))[0] == 400, 'bytes that do not hash to the reference are refused')
+    check(http('POST', '/api/xprs/file/not-a-ref.png', data)[0] == 400, 'so is a value that is not a reference')
+    st, d = http('POST', '/api/xprs/file/' + ref, data)
+    check(st == 200 and d.get('size') == 512, 'the right bytes are kept', d)
+    req = urllib.request.Request(BASE + '/api/xprs/file/' + ref)
+    with urllib.request.urlopen(req, timeout=60) as r:
+        got, ctype = r.read(), r.headers.get('Content-Type', '')
+    check(got == data and ctype.startswith('image/png'), 'and served back with their type', ctype)
 
 
 def ts(plus=0):
@@ -146,6 +165,10 @@ def main():
     check(page.get('moderation') is True and page.get('rooms') is True, 'and moderation and rooms', page)
     check(page.get('alerts') in ('moderators', 'everyone'), 'and says who may post alerts', page)
     check('chat' in page.get('tabs', []), 'the tabs include chat', page)
+
+    if sv.get('file'):
+        print('files by reference')
+        files(sv['file'])
 
     print('sessions')
     for p in (alice, bob, carol):

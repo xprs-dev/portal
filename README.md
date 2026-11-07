@@ -250,6 +250,32 @@ The administrator moderates every room the station hosts: the role the
 station offers on each room is accepted by the page as it comes, so no
 "Accept moderating" is ever asked of them.
 
+## The Blog: formatted text, images, and a post that shows at once
+
+A post is written beside its preview: raw text on the left, the page's
+reading of it on the right (a Write / Preview switch on a phone), a toolbar,
+and a counter of bytes and packets that uses the same arithmetic as the send
+(`splitParts`), so Publish turns off at the ninth packet rather than failing.
+The text is the small Markdown of XPRS.md 4.11 (`page/xprs_md.js`): headings,
+emphasis, lists, quotes, http(s) links, never HTML. Newlines travel as
+U+2028 and U+2029, since a wire is one line.
+
+An image is shrunk in the browser (1600 px, JPEG), hashed there into its
+reference (XPRS.md 7.7), shown at once from the browser's own copy, and
+stored on the station with `POST /api/xprs/file/<ref>`; the text carries only
+`![words](<ref>)`. A reader fetches it from `GET /api/xprs/file/<ref>`, and
+sees a placeholder with the words where the station does not hold it. A
+station that does not list `file` in `/api/services` gets no image button.
+
+A station takes a post at once but files it in its archive on its own clock
+(the core batches its writes every 20 seconds), and history reads only the
+archive. So the page draws the visitor's post the moment it is signed,
+marked sending, then published, asks again at 2, 4, 8, 16 and then every 30
+seconds, and drops its own copy when history returns the same packet. A
+refused post stays with Retry and Discard. Forum topics and comments do the
+same. `contract/mock_station.py 8780 20` holds sent posts back like a real
+station; `test/feed_smoke.py` runs it with six seconds.
+
 ## Forum rooms
 
 Forum is always on the left column, beside Blog. It opens on the station's

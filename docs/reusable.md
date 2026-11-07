@@ -77,3 +77,28 @@
   page through `/api/rooms` (create, mirror, add, appoint, remove, accept,
   unmirror). Anything else whose membership is a set of stations, signed and
   spread, can be the same: a room of its own kind and this panel's actions.
+- **`page/xprs_md.js`**: formatted text (XPRS.md 4.11) with no dependency
+  but `sha256`/`b64uEnc`. `mdRender(text, {img, file, mention})` escapes first
+  and reads the subset; the hooks draw references and callsigns, so any feed
+  (a status, an event's description) can render it the same way.
+  `mdToWire`/`mdFromWire` turn composer newlines into U+2028/U+2029 and back;
+  `isRef`/`isImageRef`/`mdRefs` check and list content references;
+  `refOf(bytes, ext)` is a file's reference in the browser.
+- **`splitParts(head, text)`**: the arithmetic of `splitSigned` alone,
+  `{parts|null, count, per, why}`. A composer's live "N of 9 packets" counter
+  calls it so it can never disagree with what is sent.
+- **`pendingPost(post, head, wires)`** with `pendFor`/`pendPrune`/`pendPills`:
+  the visitor's own publication shown at once, sending, published or refused
+  with Retry, until history returns the same section 5 identifier. Kept in
+  localStorage only (never the cookie). Anything else that is posted and then
+  read back from the archive (an alert, an event) should use it rather than
+  waiting for the archive's next write.
+- **`mdEditor(prefix, placeholder)`** with `mdLive`/`mdWrap`/`mdInsert`/
+  `mdAttach`/`mdBusy`: the raw text beside its preview, a toolbar, the packet
+  counter and the image button (shrunk to 1600 px, hashed, shown from a blob
+  URL, stored with `mdUpload`). Used by the Blog and the forum's topic form;
+  the ids it makes are `<prefix>-text`, `-prev`, `-count`, `-file`, and the
+  form supplies `<prefix>-title`, `<prefix>-go` and a head function.
+- **`mdImgHtml`/`mdFileHtml`/`mdPh`**: a reference drawn from the station
+  (`/api/xprs/file/<ref>`) with a placeholder when it is not held, tap to try
+  again.

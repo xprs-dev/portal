@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """A station that speaks just enough of spec/API-HTTP.md for the web chat.
 
-    python3 contract/mock_station.py [port]
+    python3 contract/mock_station.py [port] [archive-delay-seconds]
+
+The delay holds what is sent out of history that long, as a real station's
+archive does (it files its writes in batches, every 20 s in core).
 
 Serves dist/chat_page.html at / (gzipped, as both editions do), the
 /api/services answer an app host gives (`page.tabs`, `page.app`), a history of
-public rows, and POST /api/xprs/send, which it records. It exists so the page
+public rows, POST /api/xprs/send, which it records, and files by reference
+(GET/POST /api/xprs/file/<ref>, kept in memory). It exists so the page
 can be tested without a board and without a phone.
 """
+import base64
 import gzip
+import hashlib
 import json
 import re
 import os
@@ -19,6 +25,25 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SENT = []
+ARCHIVE_DELAY = 0      # seconds a sent row waits before history shows it
+FILES = {}             # sha256 hex -> (bytes, content type)
+FILE_MAX = 2 * 1024 * 1024
+FILE_TYPES = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif',
+              'webp': 'image/webp', 'avif': 'image/avif', 'bmp': 'image/bmp', 'txt': 'text/plain',
+              'md': 'text/markdown', 'pdf': 'application/pdf'}
+
+
+def ref_sha(ref):
+    """The SHA-256 hex a reference names (XPRS.md 7.7), or None."""
+    m = re.fullmatch(r'([A-Za-z0-9_-]{43}|[0-9a-fA-F]{64})\.([a-z0-9]{1,8})', ref or '')
+    if not m:
+        return None
+    h = m.group(1)
+    if len(h) == 64:
+        return h.lower()
+    return base64.urlsafe_b64decode(h + '=').hex()
+
+
 ROWS = [{
     'ts': int(time.time()) - 60, 'bearer': 'lan', 'rssi': 0, 'from': 'X1ARKL',
     'to': '', 'type': 'message', 'sig': 'verified', 'own': False,
@@ -27,7 +52,8 @@ ROWS = [{
 SERVICES = {'ok': True, 'station': 'X3MOCK', 'features': {}, 'serve': [],
             'page': {'tabs': ['chat', 'traffic', 'alerts'], 'config': False, 'app': '/app',
                      'session': True, 'admin': True, 'moderation': True,
-                     'rooms': True, 'alerts': 'moderators'}}
+                     'rooms': True, 'alerts': 'moderators'},
+            'file': {'get': True, 'put': True, 'max': FILE_MAX}}
 # An active alert the station holds (XPRS.md 10.10.2).
 ROWS.append({
     'id': '3c7e21', 'ts': int(time.time()) - 30, 'bearer': 'lora', 'rssi': -80,
@@ -229,7 +255,7 @@ class H(BaseHTTPRequestHandler):
         elif u.path == '/api/xprs/history':
             q = parse_qs(u.query)
             kinds = (q.get('kind') or [''])[0].split(',')
-            pool = list(ROWS)
+            pool = [r for r in ROWS if r.get('_at', 0) <= time.time()]
             if (q.get('session') or [''])[0] in SESSIONS:
                 pool += ADDRESSED
             rows = [r for r in pool if not kinds[0] or r['type'] in kinds]
@@ -263,6 +289,16 @@ class H(BaseHTTPRequestHandler):
             self._send(200, {'ok': True, 'count': len(rows), 'held': len(ROWS),
                              'time': 'synced', 'rows': rows,
                              'moderation': {'removed': REMOVED, 'away': AWAY}})
+        elif u.path.startswith('/api/xprs/file/'):
+            ref = u.path[len('/api/xprs/file/'):]
+            sha = ref_sha(ref)
+            if not sha:
+                return self._send(400, {'ok': False, 'error': 'not a file reference'})
+            if sha not in FILES:
+                return self._send(404, {'ok': False, 'error': 'not held'})
+            data, ctype = FILES[sha]
+            self._send(200, data, ctype, {'Cache-Control': 'public, max-age=31536000, immutable',
+                                          'ETag': '"%s"' % sha})
         elif u.path == '/__sent':
             self._send(200, SENT)
         else:
@@ -270,8 +306,20 @@ class H(BaseHTTPRequestHandler):
 
     def do_POST(self):
         n = int(self.headers.get('Content-Length') or 0)
-        body = self.rfile.read(n).decode()
+        raw = self.rfile.read(n)
         path = urlparse(self.path).path
+        if path.startswith('/api/xprs/file/'):
+            ref = path[len('/api/xprs/file/'):]
+            sha = ref_sha(ref)
+            if not sha:
+                return self._send(400, {'ok': False, 'error': 'not a file reference'})
+            if len(raw) > FILE_MAX:
+                return self._send(413, {'ok': False, 'error': 'larger than this station keeps'})
+            if hashlib.sha256(raw).hexdigest() != sha:
+                return self._send(400, {'ok': False, 'error': 'the bytes do not match the reference'})
+            FILES[sha] = (raw, FILE_TYPES.get(ref.rsplit('.', 1)[1], 'application/octet-stream'))
+            return self._send(200, {'ok': True, 'ref': ref, 'size': len(raw)})
+        body = raw.decode()
         if path == '/api/session':
             # The mock does not check the signature: the real host does
             # (WebChatApi, tested in the app). It checks the nonce.
@@ -421,7 +469,8 @@ class H(BaseHTTPRequestHandler):
                 SENT.append(wire)
                 ROWS.append({'id': 'b%05x' % len(SENT), 'ts': int(time.time()), 'bearer': 'lan',
                              'rssi': 0, 'from': f, 'to': '', 'type': 'blog',
-                             'sig': 'unverified' if part else 'verified', 'own': False, 'wire': wire})
+                             'sig': 'unverified' if part else 'verified', 'own': False, 'wire': wire,
+                             '_at': time.time() + ARCHIVE_DELAY})
                 return self._send(200, {'ok': True, 'id': 'b%05x' % len(SENT), 'wire': wire})
             if wire.startswith('t:warning ') or wire.startswith('t:info '):
                 f = wire.split(' f:')[1].split(' ')[0]
@@ -469,4 +518,5 @@ class H(BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8780
+    ARCHIVE_DELAY = float(sys.argv[2]) if len(sys.argv) > 2 else 0
     ThreadingHTTPServer(('127.0.0.1', port), H).serve_forever()

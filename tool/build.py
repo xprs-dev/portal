@@ -7,7 +7,8 @@
 page/chat_page.html carries four markers: /*FONTFACE*/ (replaced by
 page/logo-font.css), /*CRYPTO*/ (replaced by page/xprs_crypto.js with its node
 test block stripped), /*SEAL*/ (page/xprs_seal.js, which builds on it) and
-/*NOSTR*/ (page/xprs_nostr.js, which uses a NOSTR extension as the signer). The result is one self-contained HTML file, which
+/*NOSTR*/ (page/xprs_nostr.js, which uses a NOSTR extension as the signer) and
+/*MD*/ (page/xprs_md.js, the formatted text of XPRS.md 4.11). The result is one self-contained HTML file, which
 the firmware stores gzipped and the app serves gzipped (Content-Encoding:
 gzip); mtime is 0 so an unchanged page builds to identical bytes.
 """
@@ -33,6 +34,7 @@ def build():
     html = html.replace('/*CRYPTO*/', js)
     html = html.replace('/*SEAL*/', read('page/xprs_seal.js'))
     html = html.replace('/*NOSTR*/', read('page/xprs_nostr.js'))
+    html = html.replace('/*MD*/', read('page/xprs_md.js'))
     return html.encode('utf-8')
 
 
