@@ -313,6 +313,15 @@ def main():
     check(alice.admin('set', settings={'reach_posts': 'far'})[0] == 400, 'a reach is local, regional or global')
     check(alice.admin('set', settings={'peers': 'nope'})[0] == 400, 'a peer is a callsign')
     alice.admin('set', settings={'reach_alerts': 'regional', 'peers_mode': 'open', 'peers': '', 'follow': ''})
+    # A mesh group (docs/plan-mesh-trust.md): one per station, held here or joined.
+    st, d = alice.rooms('create', name='Valley %d' % seed, kind='mesh', visibility='private')
+    mesh = d.get('room', '')
+    mr = [r for r in d.get('rooms', []) if r['call'] == mesh]
+    check(st == 200 and mr and mr[0].get('kind') == 'mesh' and mr[0].get('station_role') == 'owner', 'a mesh is created, held here', d)
+    check(alice.rooms('create', name='Second', kind='mesh')[0] == 409, 'one mesh per station')
+    check(alice.rooms('add', call=mesh, member='X3AAAA')[0] == 200, 'a station is invited')
+    check(alice.rooms('accept', call=mesh)[0] == 409, 'and nothing is offered to the station that holds it')
+    alice.rooms('close', call=mesh)
     # Sharing between stations (XPRS.md 10.10.1): the shapes; the exchange itself needs two stations.
     st, d = alice.rooms('share', call=forum, shared=True, peers=['X3MIRR'])
     sr = [r for r in d.get('rooms', []) if r['call'] == forum]

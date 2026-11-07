@@ -195,6 +195,22 @@ so the exact place never reaches the station, and stores
 `/api/services`; the page shows a pin beside the station's name, a link to
 the map at that point, and a Location row on the Station view.
 
+## A mesh group
+
+With twenty stations a typed list of trusted stations would be edited
+twenty times. The Mesh card's third choice, "A mesh group", makes the trusted
+set the roster of a closed group (`X5`) instead (`peers_mode: mesh`). One
+station creates it ("Start a mesh", a room of kind `mesh` on `/api/rooms`)
+and holds its key; it invites stations, and makes some of them
+co-administrators who can invite and remove too. Each grant is one signed
+act at one station, and the record reaches every member through the
+members' own standing asks. A station joins by mirroring the mesh from any
+member ("Or join one"), sees its invitation in the record, and accepts with
+its own signature (`accept` on `/api/rooms`); leaving is `unmirror`. Each
+station asks a few members, not all of them (`WebChatApi.syncFanout`, a
+different few each week), because every record is a signed original that
+every member keeps and serves.
+
 ## The banner, and the logo
 
 What the page lets the administrator set about itself goes through one rule

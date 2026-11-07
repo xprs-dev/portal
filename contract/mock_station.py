@@ -58,6 +58,8 @@ def room_json(call, who, admin):
         j['peers'], j['seen'] = m.get('peers', []), m.get('seen', [])
     if m.get('mirrored'):
         j['mirrored'], j['owner'] = True, m['owner']
+    if m.get('kind') == 'mesh':
+        j['station_role'] = 'owner' if not m.get('mirrored') else ROOM_ROLES.get((call, 'X3MOCK'), 'none')
     j.update({
          'visibility': m['visibility'], 'posting': m['posting'], 'role': role,
          'can_post': bool(who) and (not members_only or role in ('member', 'mod'))})
@@ -332,6 +334,8 @@ class H(BaseHTTPRequestHandler):
             if SESSIONS.get(b.get('session')) != ADMIN['call']:
                 return self._send(403, {'ok': False, 'error': "only the station's administrator manages rooms"})
             act, call = b.get('action'), b.get('call', '')
+            if act in ('create', 'mirror') and b.get('kind') == 'mesh' and any(r.get('kind') == 'mesh' for r in ROOMS.values()):
+                return self._send(409, {'ok': False, 'error': 'this station is already in a mesh'})
             if act == 'create':
                 ROOM_N[0] += 1
                 call = 'X5R%03X' % ROOM_N[0]
@@ -339,7 +343,12 @@ class H(BaseHTTPRequestHandler):
                 ROOMS[call] = {'name': b['name'], 'about': b.get('about', ''), 'visibility': vis,
                                'kind': b.get('kind', 'chat'),
                                'posting': 'members' if vis == 'private' else b.get('posting', 'anyone')}
-                ROOM_ROLES[(call, ADMIN['call'])] = 'invited'
+                if b.get('kind') != 'mesh':
+                    ROOM_ROLES[(call, ADMIN['call'])] = 'invited'
+            elif act == 'accept':
+                if ROOM_ROLES.get((call, 'X3MOCK')) != 'invited':
+                    return self._send(409, {'ok': False, 'error': 'nothing offered to this station'})
+                ROOM_ROLES[(call, 'X3MOCK')] = 'member'
             elif act == 'mirror':
                 ROOMS[call] = {'name': b.get('name') or call, 'about': '', 'kind': b.get('kind', 'forum'),
                                'visibility': 'public', 'posting': 'anyone', 'mirrored': True, 'owner': b['owner']}

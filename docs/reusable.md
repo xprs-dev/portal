@@ -73,3 +73,7 @@
 - **`pick(name)` in `test/traffic_test.js` and `test/devices_test.js`**: lifts
   one function out of the page source by brace matching, so a page function is
   unit-tested in Node without a browser.
+- **`meshPanel()` with `meshRoom()`**: a closed group's roster run from the
+  page through `/api/rooms` (create, mirror, add, appoint, remove, accept,
+  unmirror). Anything else whose membership is a set of stations, signed and
+  spread, can be the same: a room of its own kind and this panel's actions.
