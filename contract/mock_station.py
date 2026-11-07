@@ -53,7 +53,7 @@ def room_json(call, who, admin):
     role = ROOM_ROLES.get((call, who), 'none')
     members_only = m['visibility'] == 'private' or m['posting'] != 'anyone'
     j = {'call': call, 'name': m['name'], 'about': m.get('about', ''),
-         'kind': m.get('kind', 'chat'), 'shared': m.get('shared', False)}
+         'kind': m.get('kind', 'chat'), 'mesh': m.get('mesh', False), 'shared': m.get('shared', False)}
     if m.get('shared'):
         j['peers'], j['seen'] = m.get('peers', []), m.get('seen', [])
     if m.get('mirrored'):
@@ -346,7 +346,8 @@ class H(BaseHTTPRequestHandler):
             elif call not in ROOMS:
                 return self._send(404, {'ok': False, 'error': 'no such room'})
             elif act == 'share':
-                ROOMS[call]['shared'] = bool(b.get('shared'))
+                ROOMS[call]['mesh'] = bool(b.get('mesh'))
+                ROOMS[call]['shared'] = bool(b.get('shared')) or bool(b.get('mesh'))
                 ROOMS[call]['peers'] = [p.upper() for p in b.get('peers', [])]
             elif act == 'unmirror':
                 del ROOMS[call]

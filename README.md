@@ -169,7 +169,31 @@ Administration's Mesh card holds the station settings of
 anywhere and fetched from their own station), `peers_mode` (`open` or
 `named`) and `peers` (the trusted stations). The page only edits them; the
 station applies them at its receive door, its digipeater and its history
-server.
+server. A forum category's card has "Shared with the mesh": the room is
+served to every trusted station, each of which mirrors it on its own when it
+meets it in the neighbour sync, so a mesh converges on the same categories;
+the Forum index marks a mirrored one "from <station>".
+
+## Days in a conversation
+
+A bubble shows the hour and minute it was said; the full date is its
+tooltip. Above the first message of each day sits a pill naming the day, as
+WhatsApp and Telegram do: Today, Yesterday, the weekday within the last
+week, then the date (with the year when it is not this one). The pills are
+redrawn after messages arrive, from the messages' own `ts`, and stick to the
+top while that day scrolls.
+
+## The station's location
+
+Administration's Location card takes a latitude and a longitude, typed or
+asked of the browser ("Use this device's location": the browser asks the
+person first, and answers only on an https page or localhost), and a radius
+of anonymity: exact, or within 1, 5, 10 or 25 km. The page snaps the point
+to the centre of a square whose side is twice the radius before it saves,
+so the exact place never reaches the station, and stores
+`page_pos: "lat,lon,radius_km"`. Every client reads it as `page.pos` on
+`/api/services`; the page shows a pin beside the station's name, a link to
+the map at that point, and a Location row on the Station view.
 
 ## The banner, and the logo
 

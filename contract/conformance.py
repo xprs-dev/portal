@@ -318,6 +318,10 @@ def main():
     sr = [r for r in d.get('rooms', []) if r['call'] == forum]
     check(st == 200 and sr and sr[0].get('shared') is True and sr[0].get('peers') == ['X3MIRR'], 'the owner shares the room with a named station', d)
     check(alice.rooms('sync', call=forum)[0] == 200, 'and may ask its peers now')
+    st, d = alice.rooms('share', call=forum, mesh=True)
+    sr = [r for r in d.get('rooms', []) if r['call'] == forum]
+    check(st == 200 and sr and sr[0].get('mesh') is True and sr[0].get('shared') is True, 'shared with the mesh: every trusted station', d)
+    alice.rooms('share', call=forum, shared=False)
     st, d = alice.rooms('mirror', call='X5M1RR', owner='X3OWNR', name='Theirs')
     mr = [r for r in d.get('rooms', []) if r['call'] == 'X5M1RR']
     check(st == 200 and mr and mr[0].get('mirrored') is True and mr[0].get('owner') == 'X3OWNR', 'a room another station holds is mirrored', d)

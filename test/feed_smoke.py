@@ -51,6 +51,26 @@ try:
     c.eval("document.querySelector('.header .logo').click()")
     check(c.eval("tab==='chat'&&curRoom==='local'"), 'the logo goes back to the chat')
 
+    print('days in a conversation')
+    c.eval("switchRoom('local')")
+    now = int(time.time())
+    c.eval("render({ts:%d,from:'X1OLDY',type:'message',sig:'verified',wire:'t:message f:X1OLDY ts:x scope:local m:three days ago'});"
+           "render({ts:%d,from:'X1OLDY',type:'message',sig:'verified',wire:'t:message f:X1OLDY ts:y scope:local m:yesterday it was'});"
+           "render({ts:%d,from:'X1OLDY',type:'message',sig:'verified',wire:'t:message f:X1OLDY ts:z scope:local m:and today'})" % (now - 3 * 86400, now - 86400, now))
+    time.sleep(0.5)
+    seps = c.eval("[].map.call(document.querySelectorAll('#msgs .daysep'),function(e){return e.textContent})") or []
+    check('Yesterday' in seps and 'Today' in seps and len(seps) >= 3, 'a pill above each day: %s' % seps)
+    order = c.eval("[].map.call(document.querySelectorAll('#msgs > *'),function(e){return e.className.indexOf('daysep')>=0?'|'+e.textContent:(e.innerText.indexOf('yesterday it was')>=0?'Y':e.innerText.indexOf('and today')>=0?'T':'')}).filter(function(x){return x}).join(' ')") or ''
+    check('|Yesterday Y' in order and '|Today' in order and order.index('|Yesterday') < order.index('|Today'), 'each message under its own day: %s' % order)
+    check(c.eval("/^\\d\\d:\\d\\d$/.test(document.querySelector('#msgs .msg .time').textContent)"), 'a bubble shows hours and minutes')
+
+    print('the station\'s location')
+    p = c.eval("JSON.stringify(snapPos(48.13721,11.57561,5))")
+    check(p and '"r":5' in p and '48.13721' not in p, 'snapped to the centre of a 10 km square: %s' % p)
+    check(c.eval("JSON.stringify(snapPos(48.13721,11.57561,0))") == '{"lat":48.13721,"lon":11.57561,"r":0}', 'exact is exact')
+    check(c.eval("var a=snapPos(48.1301,11.5701,5),b=snapPos(48.1352,11.5748,5);a.lat===b.lat&&a.lon===b.lon"),
+          'two places in one square give the same point')
+
     print('a narrow screen: the room drawer')
     c.send('Emulation.setDeviceMetricsOverride', {'width': 360, 'height': 740, 'deviceScaleFactor': 2, 'mobile': True})
     time.sleep(0.5)
@@ -135,6 +155,13 @@ try:
     time.sleep(1)
     c.load('http://127.0.0.1:%d/' % PORT)
     check(c.wait("document.getElementById('st-css').textContent===prettyCss(THEMES[2].css)", 5), 'saved by the pick alone: a visitor gets the theme')
+    c.eval("showTab('admin')")
+    check(c.wait("!!document.getElementById('ps-lat')", 5), 'Administration has the Location card')
+    c.eval("document.getElementById('ps-lat').value='48.13721';document.getElementById('ps-lon').value='11.57561';document.getElementById('ps-r').value='5';posSave()")
+    check(c.wait("getComputedStyle(document.getElementById('stpos')).display!=='none'&&document.getElementById('stpos').textContent.indexOf('5 km')>=0", 5),
+          'saved: a pin beside the station\'s name, within 5 km')
+    check(c.eval("document.getElementById('stpos').href.indexOf('openstreetmap.org')>0&&document.getElementById('stpos').href.indexOf('48.13721')<0"),
+          'its link is the map at the square\'s centre, never the exact place')
     c.eval("adminSet({page_css:':root{--accent:#6fc3ff}'})")
     c.eval("showTab('chat')")
     c.send('Page.navigate', {'url': 'http://127.0.0.1:%d/' % PORT})
@@ -143,7 +170,8 @@ try:
           'the last look is applied before the page has loaded, from this browser\'s memory')
     c.wait("document.readyState==='complete'&&!!document.getElementById('txt')", 10)
     time.sleep(1)
-    c.eval("adminSet({page_logo:''});adminSet({page_css:''})")
+    check(c.eval("(document.getElementById('stpos')||{}).style&&document.getElementById('stpos').style.display!=='none'"), 'every visitor gets the pin from the station')
+    c.eval("adminSet({page_logo:''});adminSet({page_css:''});adminSet({page_pos:''})")
     check(c.wait("document.getElementById('logo').innerText==='XPRS'", 5), 'emptied, the logo is XPRS again')
     c.eval("showTab('chat');switchRoom('forum')")
     check(c.wait("fabMode==='category'&&" + fab + "!=='none'"), 'the + offers a new category to the administrator')

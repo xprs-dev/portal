@@ -52,6 +52,13 @@ try:
         size(c, mode)
         c.load('http://127.0.0.1:%d/' % PORT)
         c.wait("canSign()", 10)
+        now = int(time.time())
+        for i, (age, who, txt) in enumerate([(3*86400+3600, 'X1RD89', 'Net tonight at eight on the usual frequency.'),
+                                             (3*86400+3000, 'X1QZ3N', 'Count me in, mast is up.'),
+                                             (86400+600, 'X1RD89', 'Thanks all, eleven check-ins.'),
+                                             (1800, 'X1QZ3N', 'Road to the ridge is clear again.')]):
+            c.eval("render({ts:%d,from:'%s',type:'message',sig:'verified',wire:'t:message f:%s ts:t%d scope:local m:%s'})" % (now-age, who, who, i, txt))
+        time.sleep(0.5)
         shot(c, mode + '_chat')
         if mode != 'desktop':
             c.eval("for(var i=0;i<40;i++){dmPeers['X1P'+(100+i)]=true;}dmUnread['X1P105']=2;dmUnread['X1P121']=1;renderSide();toggleSide()")
@@ -63,6 +70,7 @@ try:
         if c.wait("!!document.getElementById('ad-claim')", 5):
             c.eval("document.getElementById('ad-claim').click()")
         c.wait("isStationAdmin===true", 10)
+        c.eval("adminSet({page_pos:'48.1347,11.5729,5'})")
         c.eval("adminSet({page_banner:'<b>Hill station</b>: on air from the ridge, weekdays after six.'})")
         time.sleep(0.5)
         shot(c, mode + '_banner')
@@ -94,6 +102,10 @@ try:
         time.sleep(1.5)
         shot(c, mode + '_admin')
         c.eval("showTab('admin')")
+        c.wait("!!document.getElementById('ps-lat')", 5)
+        c.eval("document.getElementById('ps-lat').scrollIntoView({block:'center'})")
+        time.sleep(0.4)
+        shot(c, mode + '_admin_location')
         c.wait("!!document.getElementById('reach_alerts')", 5)
         c.eval("document.getElementById('reach_alerts').scrollIntoView({block:'center'})")
         time.sleep(0.4)
@@ -110,7 +122,7 @@ try:
         time.sleep(0.5)
         shot(c, mode + '_admin_look')
         c.eval("adminSet({page_logo:''});adminSet({page_css:''});showTab('chat')")
-        c.eval("showTab('chat');switchRoom('local')")
+        c.eval("showTab('chat');switchRoom('local');adminSet({page_pos:''})")
 finally:
     c.close()
     station.terminate()
