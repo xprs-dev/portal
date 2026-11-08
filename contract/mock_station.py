@@ -252,12 +252,27 @@ class H(BaseHTTPRequestHandler):
             self._send(200, {'ok': True, 'rooms': [
                 room_json(c, who, admin) for c in sorted(ROOMS, key=lambda c: ROOMS[c]['name'])
                 if admin or ROOMS[c]['visibility'] == 'public' or (c, who) in ROOM_ROLES]})
+        elif u.path == '/api/xprs/mail':
+            q = parse_qs(u.query)
+            call = (q.get('call') or [''])[0]
+            who = SESSIONS.get((q.get('session') or [''])[0])
+            if not call:
+                return self._send(400, {'ok': False, 'error': 'mail needs call='})
+            if not who or (who != call and who != ADMIN['call']):
+                return self._send(403, {'ok': False, 'error': 'mail needs a session for that callsign'})
+            rows = [r for r in ADDRESSED if r['to'] == call]
+            self._send(200, {'ok': True, 'count': len(rows), 'held': len(ROWS) + len(ADDRESSED),
+                             'time': 'synced', 'rows': rows})
         elif u.path == '/api/xprs/history':
             q = parse_qs(u.query)
             kinds = (q.get('kind') or [''])[0].split(',')
             pool = [r for r in ROWS if r.get('_at', 0) <= time.time()]
-            if (q.get('session') or [''])[0] in SESSIONS:
-                pool += ADDRESSED
+            # Mail is its two parties' (XPRS.md 12.7): a session proving one
+            # of them, or the administrator's, reads it; nobody else does.
+            who = SESSIONS.get((q.get('session') or [''])[0])
+            if who:
+                pool += [r for r in ADDRESSED
+                         if who == ADMIN['call'] or r['to'] == who or r['from'] == who]
             rows = [r for r in pool if not kinds[0] or r['type'] in kinds]
             call = (q.get('call') or [''])[0]
             if call:
@@ -512,6 +527,16 @@ class H(BaseHTTPRequestHandler):
                 elif ' revoke:' in wire:
                     AWAY.append(wire.split(' revoke:')[1].split(' ')[0])
             SENT.append(wire)
+            # A message to one callsign is mail (XPRS.md 12.1): held for its
+            # two parties, read only through a session proving one of them.
+            head = wire.split(' m:')[0]
+            if wire.startswith('t:message ') and ' d:' in head and ' d:#' not in head:
+                f = wire.split(' f:')[1].split(' ')[0]
+                d = wire.split(' d:')[1].split(' ')[0]
+                ADDRESSED.append({'id': 'm%05x' % len(SENT), 'ts': int(time.time()), 'bearer': 'lan',
+                                  'rssi': 0, 'from': f, 'to': d, 'type': 'message',
+                                  'sig': 'verified', 'own': False, 'wire': wire})
+                return self._send(200, {'ok': True, 'id': 'm%05x' % len(SENT), 'wire': wire})
             return self._send(200, {'ok': True, 'id': 'abc123', 'wire': wire})
         self._send(404, {'ok': False, 'error': 'not here'})
 

@@ -182,6 +182,29 @@ def main():
     check(st2 == 403, 'a made-up challenge is refused', st2)
     check(bob.prove() == 200 and carol.prove() == 200, 'bob and carol have sessions too')
 
+    print('mail')
+    # A message to one callsign is mail, and mail belongs to its two parties
+    # (XPRS.md 12.7): the station files it, serves it to a session proving
+    # the sender or the recipient (and to its administrator), and to nobody
+    # else -- not in history, not on /api/xprs/mail.
+    note = 'conformance mail %d' % seed
+    st, d = bob.send('t:message f:%s d:%s ts:%s m:%s' % (bob.call, carol.call, ts(), note))
+    check(st == 200, "bob's message to carol is taken", d)
+    has = lambda rows: any(note in r.get('wire', '') for r in rows)
+    for _ in range(30):
+        if has(carol.history(kind='message', limit='50').get('rows', [])):
+            break
+        time.sleep(1)
+    check(has(carol.history(kind='message', limit='50').get('rows', [])), 'carol, the recipient, reads it in her history')
+    check(has(bob.history(kind='message', limit='50').get('rows', [])), 'bob, the sender, reads it in his')
+    check(not has(http('GET', '/api/xprs/history', query='kind=message&limit=50')[1].get('rows', [])), 'without a session it is not served')
+    st, d = http('GET', '/api/xprs/mail', query='call=%s' % carol.call)
+    check(st == 403, "nor is carol's mailbox, without her session", st)
+    st, d = http('GET', '/api/xprs/mail', query='call=%s&session=%s' % (carol.call, bob.session))
+    check(st == 403, "nor with somebody else's", st)
+    st, d = http('GET', '/api/xprs/mail', query='call=%s&session=%s' % (carol.call, carol.session))
+    check(st == 200 and has(d.get('rows', [])), 'with hers, the mailbox lists it', d if st != 200 else None)
+
     print('the administrator')
     s0 = alice.state()
     check(s0.get('local') is True, 'this suite runs from the station\'s network (local)', s0)
