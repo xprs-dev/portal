@@ -96,6 +96,21 @@ behind their callsign: `GET /api/session` gives a one-time nonce, the page signs
 that `/api/xprs/history?session=` then honours. Anyone can write any callsign;
 only the key signs.
 
+The session reply also says where this callsign's mail is kept (`holders`),
+whether the station offers to keep it (`offer`: nobody does yet and it has
+room) and how much waits (`mail`). Only the visitor's own key may say where
+their mail goes (XPRS.md 9.12), so with an offer the page signs
+`t:mailbox f:<call> ts:<stamp> hold:<station> until:<+30 days>` and posts it,
+remembers the station for 23 days and shows it on the Station tab; every
+other archiver learns of the arrangement from that packet. A message
+addressed to this callsign is acknowledged once, when it is drawn, with a
+signed `t:receipt ... r:<id> s:ack` (9.7.1), which is what lets every station
+holding a copy release it; the ids are kept so a reload does not thank twice.
+When the reply says mail waits, `/api/xprs/mail?call=<me>&session=` is asked
+once, so a message that arrived while the browser was closed is shown even
+when it is older than the chat window. The composer leaves room for the
+station's `via:`, which it adds when it re-airs a visitor's packet.
+
 ## The station's name, the menu, and its administrator
 
 The title reads `XPRS (X3PTZM)`: the station's callsign from `/api/services`
