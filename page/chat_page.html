@@ -2037,9 +2037,10 @@ function loadStation(){
       }
       if(sv.serve&&sv.serve.length)
         h2+='<p class="dim">Announced to others: '+esc(sv.serve.join(', '))+'</p>';
-      h2+='<h3>Screen</h3><img class="shot" alt="the station screen" '+
+      /* The screen, heading and all, only on a station that has one. */
+      h2+='<div id="st-screen"><h3>Screen</h3><img class="shot" alt="the station screen" '+
           'src="/api/screen?t='+Date.now()+'" '+
-          'onerror="this.parentNode.removeChild(this)">';
+          'onerror="var d=el(\'st-screen\');if(d)d.parentNode.removeChild(d)"></div>';
       var m=el('st-more'); if(m)m.innerHTML=h2;
     });
   });
