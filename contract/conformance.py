@@ -103,7 +103,7 @@ def ts(plus=0):
 
 class Person:
     def __init__(self, priv):
-        self.priv, self.session = priv, None
+        self.priv, self.session, self.reply = priv, None, {}
         self.npub = npub(priv)
         # The callsign a key derives (XPRS.md 3), as the page makes it: a
         # board refuses an X1 identity whose callsign is not its key's.
@@ -127,7 +127,7 @@ class Person:
                 st, d = http('GET', '/api/session')
                 continue
             if st == 200:
-                self.session = d2['session']
+                self.session = d2['session']; self.reply = d2
             return st
         return st
 
@@ -204,6 +204,31 @@ def main():
     check(st == 403, "nor with somebody else's", st)
     st, d = http('GET', '/api/xprs/mail', query='call=%s&session=%s' % (carol.call, carol.session))
     check(st == 200 and has(d.get('rows', [])), 'with hers, the mailbox lists it', d if st != 200 else None)
+
+    print('a mailbox for a visitor')
+    # XPRS.md 12.8.3 step zero and 9.12: a station offers to be the mailbox
+    # of a visitor who has none, in the session reply; the visitor's own key
+    # signs the declaration naming it, and from then on the station is their
+    # holder. Only when the page says it offers one (page.mailbox).
+    if page.get('mailbox') is True:
+        dave = Person('44' * 31 + '%02x' % ((seed * 11) & 255 or 7))
+        eve = Person('55' * 31 + '%02x' % ((seed * 13) & 255 or 9))
+        check(dave.identity()[0] == 200 and dave.prove() == 200, 'dave, a newcomer, has a session')
+        r = dave.reply
+        check(isinstance(r.get('holders'), list) and 'mail' in r, 'the reply says who holds his mail and how much waits', r)
+        if r.get('holders') == []:
+            check(r.get('offer') == station, 'with none, this station offers itself', r)
+            st, d = dave.send('t:mailbox f:%s ts:%s hold:%s until:%s' % (dave.call, ts(), station, ts(30 * 86400)))
+            check(st == 200, "dave's signed declaration is taken", d)
+            check(dave.prove() == 200 and dave.reply.get('holders') == [station] and 'offer' not in dave.reply,
+                  'the next session names the station as his holder, with no offer', dave.reply)
+        else:
+            print('  (the station already holds for this callsign: %s)' % r.get('holders'))
+        mboxw = 't:mailbox f:%s ts:%s hold:%s' % (dave.call, ts(), station)
+        st, _ = http('POST', '/api/xprs/send', {'wire': sign(eve.priv, mboxw)})
+        check(st in (400, 409), 'a declaration another key signed in his name is refused (%s)' % st)
+    else:
+        print('  (this station does not offer a mailbox: page.mailbox absent)')
 
     print('the administrator')
     s0 = alice.state()

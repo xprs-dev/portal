@@ -51,7 +51,7 @@ ROWS = [{
 }]
 SERVICES = {'ok': True, 'station': 'X3MOCK', 'features': {}, 'serve': [],
             'page': {'tabs': ['chat', 'traffic', 'alerts'], 'config': False, 'app': '/app',
-                     'session': True, 'admin': True, 'moderation': True,
+                     'session': True, 'mailbox': True, 'admin': True, 'moderation': True,
                      'rooms': True, 'alerts': 'moderators'},
             'file': {'get': True, 'put': True, 'max': FILE_MAX}}
 # An active alert the station holds (XPRS.md 10.10.2).
@@ -173,6 +173,55 @@ def admin_state(token):
 SESSIONS = {}      # token -> callsign
 NONCE = 'c0ffee0123456789'
 ADDRESSED = []     # rows only a session may read (to be set by /__inject)
+KEYS = {}          # callsign -> x-only pubkey bytes, from t:identity k:npub
+MAILBOX = {}       # callsign -> hold: list from its verified t:mailbox
+SERVED = set()     # visitors this station offered itself to (12.8.3 step zero)
+
+# The page's signature scheme (page/xprs_crypto.js xprsSign): sig = e16 || s32,
+# e16 the first sixteen bytes of tagged('XPRS/challenge', rx || px || digest),
+# digest = sha256 of the wire without sig:/via:. Verified with the curve of
+# test/bip340_ref.py: R = s*G - e*P must give back the same e16.
+import importlib.util as _ilu
+_ref = None
+def _curve():
+    global _ref
+    if _ref is None:
+        spec = _ilu.spec_from_file_location('bip340_ref', os.path.join(os.path.dirname(__file__), '..', 'test', 'bip340_ref.py'))
+        _ref = _ilu.module_from_spec(spec); spec.loader.exec_module(_ref)
+    return _ref
+B85 = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-+=^!/*?&<>()[]%$#@,;_'
+def b85dec(t):
+    out = b''
+    for i in range(0, len(t), 5):
+        v = 0
+        for c in t[i:i + 5]: v = v * 85 + B85.index(c)
+        out += v.to_bytes(4, 'big')
+    return out
+BC = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l'
+def npub_px(npub):
+    data = [BC.index(c) for c in npub.split('1', 1)[1][:-6]]
+    acc = bits = 0; out = bytearray()
+    for v in data:
+        acc = (acc << 5) | v; bits += 5
+        while bits >= 8:
+            bits -= 8; out.append((acc >> bits) & 255)
+    return bytes(out)
+def tagged(tag, m):
+    t = hashlib.sha256(tag.encode()).digest(); return hashlib.sha256(t + t + m).digest()
+def xprs_verified(wire, px):
+    m = re.search(r' sig:([!-~]{60})', wire)
+    if not m: return False
+    sig = b85dec(m.group(1))
+    canon = re.sub(r' sig:[!-~]{60}', '', wire); canon = re.sub(r' via:[A-Za-z0-9,\-]+', '', canon)
+    digest = hashlib.sha256(canon.encode()).digest()
+    e16, s = sig[:16], int.from_bytes(sig[16:48], 'big')
+    r = _curve()
+    e = int.from_bytes(e16, 'big')
+    Pt = r.lift(int.from_bytes(px, 'big'))
+    R = r.add(r.mul(s), r.mul((r.N - e) % r.N, Pt))
+    if R is None: return False
+    rx = R[0].to_bytes(32, 'big')
+    return tagged('XPRS/challenge', rx + px + digest)[:16] == e16
 if os.environ.get('MOCK_FLOOD'):
     # A busy bridged channel: 200 regional messages newer than the local one,
     # so the newest page of everything holds no Local conversation at all.
@@ -345,8 +394,17 @@ class H(BaseHTTPRequestHandler):
             if ' m:' + NONCE not in wire:
                 return self._send(403, {'ok': False, 'error': 'no such challenge'})
             token = 'tok%d' % (len(SESSIONS) + 1)
-            SESSIONS[token] = wire.split(' f:')[1].split(' ')[0]
-            return self._send(200, {'ok': True, 'session': token})
+            call = wire.split(' f:')[1].split(' ')[0]
+            SESSIONS[token] = call
+            # Whose mailbox this visitor has, and this station's offer to be
+            # it when they have none (XPRS.md 12.8.3 step zero, 9.12).
+            holders = list(MAILBOX.get(call, []))
+            if not holders and call in SERVED: holders = [SERVICES['station']]
+            reply = {'ok': True, 'session': token, 'call': call, 'holders': holders,
+                     'mail': len([r for r in ADDRESSED if r['to'] == call])}
+            if not holders:
+                SERVED.add(call); reply['offer'] = SERVICES['station']
+            return self._send(200, reply)
         if path == '/api/admin':
             b = json.loads(body or '{}')
             call, act = SESSIONS.get(b.get('session')), b.get('action')
@@ -465,6 +523,25 @@ class H(BaseHTTPRequestHandler):
                 wire = body
             if not wire.startswith('t:') or ' f:' not in wire or len(wire) > 250:
                 return self._send(400, {'ok': False, 'error': 'malformed'})
+            if wire.startswith('t:identity '):
+                f = wire.split(' f:')[1].split(' ')[0]
+                k = re.search(r' k:(npub1[a-z0-9]+)', wire)
+                if k: KEYS[f] = npub_px(k.group(1))
+            if wire.startswith('t:mailbox ') or wire.startswith('t:receipt '):
+                f = wire.split(' f:')[1].split(' ')[0]
+                if f not in KEYS:
+                    return self._send(409, {'ok': False, 'error': 'identity unknown'})
+                if not xprs_verified(wire, KEYS[f]):
+                    return self._send(400, {'ok': False, 'error': 'forged'})
+                SENT.append(wire)
+                if wire.startswith('t:mailbox '):
+                    h = re.search(r' hold:([A-Za-z0-9,\-]+)', wire)
+                    if h: MAILBOX[f] = h.group(1).split(',')
+                else:
+                    rid = re.search(r' r:([0-9a-f]+)', wire)
+                    if rid:
+                        ADDRESSED[:] = [r for r in ADDRESSED if r.get('id') != rid.group(1)]
+                return self._send(200, {'ok': True, 'id': 'x%05x' % len(SENT), 'wire': wire})
             if wire.startswith('t:moderate ') and ' d:X5' in wire:
                 f = wire.split(' f:')[1].split(' ')[0]
                 g = wire.split(' d:')[1].split(' ')[0]

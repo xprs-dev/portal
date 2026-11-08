@@ -886,6 +886,7 @@ function ensureSession(tries){
         var j=null;try{j=JSON.parse(x.responseText);}catch(e){}
         if(x.status===200&&j&&j.session){
           sess=j.session;chatLoaded=false;chatDeep=false;load();
+          onSession(j);
           if(tab==='admin')loadAdmin();
           if(canModerate)loadMyRole();
           if(canRooms)loadRooms();
@@ -930,6 +931,57 @@ function getFallback(wire,fin){
 }
 
 var identSent=0;
+/* ---- the station as this visitor's mailbox (XPRS.md 9.12, 12.8.3) ------
+   The session reply says who holds this callsign's mail (`holders`), whether
+   this station offers to (`offer`: it has no holder yet and the station has
+   room) and how much waits here (`mail`). Only the visitor's own key may say
+   where their mail goes (9.12: a forged declaration collects somebody else's
+   mail), so the PAGE signs the declaration naming the station, once, and
+   again when the station differs or the declaration is a week from its
+   until:. The station serves the visitor from the moment it offers; the
+   declaration is what every other archiver learns from. */
+var sessHolders=null;
+function tsPlus(sec){
+  var d=new Date(Date.now()+sec*1000),p=function(n){return (n<10?'0':'')+n;};
+  return d.getUTCFullYear()+'-'+p(d.getUTCMonth()+1)+'-'+p(d.getUTCDate())+
+    '_'+p(d.getUTCHours())+':'+p(d.getUTCMinutes())+':'+p(d.getUTCSeconds());}
+function onSession(j){
+  sessHolders=j.holders||null;
+  if(j.offer&&canSign()){
+    var rec=null;try{rec=JSON.parse(stGet('xprs_mbox')||'null');}catch(e){}
+    var stale=!rec||rec.station!==j.offer||!rec.at||Date.now()-rec.at>23*86400000;
+    if(stale){
+      signAny('t:mailbox f:'+mycall+' ts:'+tsNow()+' hold:'+j.offer+' until:'+tsPlus(30*86400),function(w){
+        if(!w)return;
+        postWire(w,function(ok){
+          if(ok){stSet('xprs_mbox',JSON.stringify({station:j.offer,at:Date.now()}));
+                 sessHolders=[j.offer];if(tab==='station')loadStation();}
+        });
+      });
+    }
+  }
+  /* Mail that waited while this browser was closed: older than the chat
+     window's first page, so asked for by name, once per session. */
+  if(j.mail>0)getJSON('/api/xprs/mail?call='+encodeURIComponent(mycall)+'&session='+sess,function(d){
+    var rows=(d&&d.rows||[]).slice().reverse();
+    for(var i=0;i<rows.length;i++)render(rows[i]);
+  });
+}
+/* ---- receipts (XPRS.md 9.7.1, 12.8.2) -----------------------------------
+   A message addressed to this callsign is acknowledged once, when it reaches
+   this device: the holders release their copies on the signed receipt, and
+   the sender learns it arrived. The ids acknowledged are remembered so a
+   reload does not thank twice. */
+var ackedIds=null;
+function ackOnce(row,id){
+  if(!canSign()||!id)return;
+  if(ackedIds===null){try{ackedIds=JSON.parse(stGet('xprs_acked')||'[]');}catch(e){ackedIds=[];}}
+  if(ackedIds.indexOf(id)>=0)return;
+  ackedIds.push(id);while(ackedIds.length>200)ackedIds.shift();
+  stSet('xprs_acked',JSON.stringify(ackedIds));
+  signAny('t:receipt f:'+mycall+' d:'+baseCall(row.from)+' ts:'+tsNow()+' r:'+id+' s:ack',function(w){
+    if(w)postWire(w,null);});
+}
 function sendIdentity(){
   var now=Date.now();
   if(now-identSent<86400000)return;
@@ -978,7 +1030,10 @@ function sendMsg(){
     var head=typ+' f:'+mycall+' ts:'+tsNow()+where+thread;
     signAny(sealedBody?head+' x:'+sealedBody:head+' m:'+text,function(wire,why){
       if(!wire){snack('Not sent: '+(why||'not signed'));t.value=text;return;}
-      if(u8(wire).length>250){snack('Message too long');t.value=text;return;}
+      /* The station re-airs this on its radios with its own via: (XPRS.md
+         9, 12.8.3 step 4): leave it the room, or a full packet goes out
+         bare and neighbours take the visitor for a station in the room. */
+      if(u8(wire).length>250-(stationCall?5+stationCall.length:0)){snack('Message too long');t.value=text;return;}
 
       sendOut(wire,text,!!sealedBody,peer);
     });
@@ -1451,6 +1506,8 @@ function render(row){
    * relays differ only in via:, which the identifier leaves out. */
   var sk=wireId(w);
   if(seen[sk])return;
+  if(room.slice(0,3)==='dm:'&&baseCall(row.to||'')===baseCall(mycall)&&
+     baseCall(row.from)!==baseCall(mycall))ackOnce(row,sk);
   var mi=w.indexOf(' m:');
   var text=mi>=0?w.slice(mi+3):'';
   var sealed=false;
@@ -1929,6 +1986,9 @@ function loadStation(){
     var ar=d.archiver||d.indexer; // "indexer" until 2026-11-06, older builds
     if(ar)
       h+=row('Archive',esc(ar.count)+' packets held');
+    if(sessHolders)
+      h+=row('My mailbox',sessHolders.length?esc(sessHolders.join(', ')):
+             '<span class="dim">none yet</span>');
     h+='</table>';
     if(d.lora){
       h+='<h3>LoRa</h3><table class="kv">'+
