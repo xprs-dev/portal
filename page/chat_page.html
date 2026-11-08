@@ -1142,7 +1142,13 @@ var clearedBefore=parseInt(stGet('xprs_cleared')||'0',10)||0;
  * the bearer that delivered it, and a packet the station heard out of range
  * (row.out) is in none of them. A packet with d: naming a person is a 1:1
  * and gets its own room. */
-var curRoom=stGet('xprs_room')||'local';
+/* Local, every time the page opens. It used to come back to the room last
+   used, but the captive-portal WebView gives every station's hotspot the
+   same origin (connectivitycheck.gstatic.com), so a room chosen on one
+   station's page followed the visitor to the next: Regional on a dongle
+   because of an afternoon on another board. The room the visitor is
+   standing in is the one to start in. */
+var curRoom='local';
 var allRows=[];              /* every row heard, for room switches */
 var dmPeers={};              /* callsign -> true */
 function baseCall(c){var i=c.indexOf('-');return i<0?c:c.slice(0,i);}
@@ -1231,7 +1237,7 @@ function renderSide(){
 /* Rooms the station keeps from visitors outside its network. */
 var roomPrivate={};
 function switchRoom(r){
-  curRoom=r;stSet('xprs_room',r);
+  curRoom=r;
   closeSide();
   cancelReply();
   seen={};
