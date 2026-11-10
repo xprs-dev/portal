@@ -299,6 +299,35 @@ async def run(port, remote, wifi=False):
             sent = json.load(urllib.request.urlopen('http://127.0.0.1:%d/__sent' % port))
             check(await ev("window.__asked") == 1 and not any(' d:X1NOKY ' in x for x in sent),
                   'with no key known it asks before sending in clear, and a no sends nothing')
+            if wifi:
+                # The Gallery: a board with a card keeps photographs.
+                check(await ev("!!document.querySelector('#side [data-r=gallery]')"), 'the Gallery is on the list')
+                await ev("(closeMenu&&closeMenu(),switchRoom('gallery'),1)")
+                await asyncio.sleep(2)
+                await ev("(el('gc-name').value='Events',galNewCategory(),1)")
+                await asyncio.sleep(3)
+                check(await ev("galCat&&!!el('ge-title')"), 'the administrator makes a category and opens it')
+                await ev("(el('ge-title').value='Field day 2026',galNewEvent(),1)")
+                await asyncio.sleep(3)
+                check(await ev("galEvent&&galEvent.title==='field-day-2026'"), 'and an event in it')
+                await ev("""(function(){var c=document.createElement('canvas');c.width=900;c.height=600;
+                  var g=c.getContext('2d');g.fillStyle='#3a7';g.fillRect(0,0,900,600);
+                  c.toBlob(function(b){galAdd({files:[new File([b],'mast top.jpg',{type:'image/jpeg'})],value:''});},'image/jpeg',.9);
+                  return 1;})()""")
+                await asyncio.sleep(8)
+                sent = json.load(urllib.request.urlopen('http://127.0.0.1:%d/__sent' % port))
+                pic = [w for w in sent if w.startswith('t:message ') and ' file:' in w and ' r:' in w]
+                comp = [w for w in sent if w.startswith('t:file ') and ' size:' in w and ' name:mast-top.jpg' in w]
+                check(len(pic) == 1 and len(comp) == 1, 'a photo: its preview on a message, the original on a t:file')
+                check(await ev("document.querySelectorAll('#msgs .galgrid img').length") == 1,
+                      'and it shows in the event')
+                await ev("(galLike(Object.keys(galRows.pics)[0]),1)")
+                await asyncio.sleep(3)
+                sent = json.load(urllib.request.urlopen('http://127.0.0.1:%d/__sent' % port))
+                check(any(w.startswith('t:reaction ') and ' add:like' in w for w in sent), 'a like is a t:reaction add:like')
+                check('1' in (await ev("(document.querySelector('#msgs .galike.on')||{}).textContent") or ''),
+                      'and is counted')
+                await ev("(switchRoom('local'),1)")
     finally:
         chrome.terminate()
         mock.terminate()

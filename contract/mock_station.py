@@ -57,6 +57,7 @@ SERVICES = {'ok': True, 'station': 'X3MOCK', 'features': {}, 'serve': [],
 # MOCK_WIFI: a board, which joins an internet WiFi and lists `settings`.
 if os.environ.get('MOCK_WIFI'):
     SERVICES['page']['tabs'] = SERVICES['page']['tabs'] + ['settings']
+    SERVICES['page']['gallery'] = True   # a board with a card keeps photographs
 WIFI_JOINS = []
 WIFI = {'ok': True, 'ssid': 'home', 'up': True, 'internet': True, 'join': 'idle',
         'why': '', 'known': [{'ssid': 'home', 'internet': True}]}
@@ -303,7 +304,7 @@ class H(BaseHTTPRequestHandler):
             room = parse_qs(u.query)['topics'][0]
             if room not in ROOMS:
                 return self._send(404, {'ok': False, 'error': 'no such room'})
-            if ROOMS[room].get('kind') != 'forum':
+            if ROOMS[room].get('kind') not in ('forum', 'gallery'):
                 return self._send(400, {'ok': False, 'error': 'not a forum room'})
             self._send(200, {'ok': True, 'room': room, 'topics': forum_topics(room)})
         elif u.path == '/api/rooms':
@@ -602,11 +603,19 @@ class H(BaseHTTPRequestHandler):
                 m = ROOMS.get(g)
                 if m is None:
                     return self._send(404, {'ok': False, 'error': 'no such room'})
-                if (m['visibility'] == 'private' or m['posting'] != 'anyone') \
+                typ = wire[2:wire.index(' ')]
+                if m.get('kind') == 'gallery':
+                    # API-HTTP.md: the room's staff adds events and pictures,
+                    # readers like.
+                    staff = f == ADMIN['call'] or ROOM_ROLES.get((g, f)) == 'mod'
+                    if typ not in ('blog', 'message', 'file', 'reaction'):
+                        return self._send(403, {'ok': False, 'error': 'a gallery takes events, pictures and likes'})
+                    if typ != 'reaction' and not staff:
+                        return self._send(403, {'ok': False, 'error': 'only the moderators add events and pictures here'})
+                elif (m['visibility'] == 'private' or m['posting'] != 'anyone') \
                         and ROOM_ROLES.get((g, f)) not in ('member', 'mod'):
                     return self._send(403, {'ok': False, 'error': 'only members post in this room'})
-                typ = wire[2:wire.index(' ')]
-                if typ == 'blog' and m.get('kind') != 'forum':
+                if typ == 'blog' and m.get('kind') not in ('forum', 'gallery'):
                     return self._send(403, {'ok': False, 'error': 'posts go in a forum room'})
                 SENT.append(wire)
                 # The mock files a part as a row like any other (the real engine
