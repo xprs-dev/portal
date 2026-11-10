@@ -157,6 +157,48 @@ function callsignFromNpub(npub){var s='X1';
   for(var i=5;i<9;i++)s+=npub[i].toUpperCase();return s;}
 function pubkeyX(privBytes){var Pt=mulG(b2n(privBytes));return n2b(Pt[0],32);}
 
+/* SHA-256 a piece at a time, for a file too large to hold (a film for the
+ * Gallery): st=sha256Init(); sha256Update(st,bytes)...; sha256Final(st). */
+var SHA256_K=null;
+function sha256Init(){
+  if(!SHA256_K){var p=[];for(var n=2;p.length<64;n++){var q=true;for(var d=2;d*d<=n;d++)if(n%d===0){q=false;break;}if(q)p.push(n);}
+    SHA256_K=p.map(function(x){return (Math.pow(x,1/3)%1)*4294967296|0;});}
+  return {H:[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19],
+          b:new Uint8Array(64),n:0,len:0,w:new Array(64)};
+}
+function sha256Block(st,x,off){
+  var w=st.w,H=st.H,K=SHA256_K,i;
+  for(i=0;i<16;i++)w[i]=(x[off+4*i]<<24)|(x[off+4*i+1]<<16)|(x[off+4*i+2]<<8)|x[off+4*i+3];
+  for(i=16;i<64;i++){var a1=w[i-15],b1=w[i-2];
+    w[i]=(w[i-16]+(((a1>>>7)|(a1<<25))^((a1>>>18)|(a1<<14))^(a1>>>3))+w[i-7]+
+      (((b1>>>17)|(b1<<15))^((b1>>>19)|(b1<<13))^(b1>>>10)))|0;}
+  var a=H[0],b=H[1],c=H[2],d=H[3],e=H[4],f=H[5],g=H[6],h=H[7];
+  for(i=0;i<64;i++){
+    var t1=(h+(((e>>>6)|(e<<26))^((e>>>11)|(e<<21))^((e>>>25)|(e<<7)))+((e&f)^(~e&g))+K[i]+w[i])|0;
+    var t2=((((a>>>2)|(a<<30))^((a>>>13)|(a<<19))^((a>>>22)|(a<<10)))+((a&b)^(a&c)^(b&c)))|0;
+    h=g;g=f;f=e;e=(d+t1)|0;d=c;c=b;b=a;a=(t1+t2)|0;
+  }
+  H[0]=(H[0]+a)|0;H[1]=(H[1]+b)|0;H[2]=(H[2]+c)|0;H[3]=(H[3]+d)|0;
+  H[4]=(H[4]+e)|0;H[5]=(H[5]+f)|0;H[6]=(H[6]+g)|0;H[7]=(H[7]+h)|0;
+}
+function sha256Update(st,x){
+  var i=0,l=x.length;st.len+=l;
+  if(st.n){while(st.n<64&&i<l)st.b[st.n++]=x[i++];if(st.n<64)return;sha256Block(st,st.b,0);st.n=0;}
+  for(;i+64<=l;i+=64)sha256Block(st,x,i);
+  while(i<l)st.b[st.n++]=x[i++];
+}
+function sha256Final(st){
+  var bits=st.len*8,hi=Math.floor(bits/4294967296),lo=bits>>>0,pad=new Uint8Array(((st.n+9+63)>>6)<<6);
+  pad.set(st.b.subarray(0,st.n));pad[st.n]=0x80;
+  var L=pad.length;
+  pad[L-8]=(hi>>>24)&255;pad[L-7]=(hi>>>16)&255;pad[L-6]=(hi>>>8)&255;pad[L-5]=hi&255;
+  pad[L-4]=(lo>>>24)&255;pad[L-3]=(lo>>>16)&255;pad[L-2]=(lo>>>8)&255;pad[L-1]=lo&255;
+  for(var o=0;o<L;o+=64)sha256Block(st,pad,o);
+  var out=new Uint8Array(32);
+  for(var i=0;i<8;i++){out[4*i]=(st.H[i]>>>24)&255;out[4*i+1]=(st.H[i]>>>16)&255;out[4*i+2]=(st.H[i]>>>8)&255;out[4*i+3]=st.H[i]&255;}
+  return out;
+}
+
 // ---- node test against the spec 9.1.2 worked example ----
 if(typeof module!=='undefined'&&typeof require!=='undefined'&&require.main===module){
   var canonical='t:message f:X1QZ3N d:LISBOA ts:2026-08-08_14:26:40 m:net starts in ten minutes';
@@ -176,3 +218,4 @@ if(typeof module!=='undefined'&&typeof require!=='undefined'&&require.main===mod
   var back=nsecDecode(ns);
   console.log('nsec roundtrip', ns.slice(0,12)+'...', back&&b2n(back)===7n?'OK':'FAIL');
 }
+

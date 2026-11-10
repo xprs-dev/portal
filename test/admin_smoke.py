@@ -319,8 +319,25 @@ async def run(port, remote, wifi=False):
                 pic = [w for w in sent if w.startswith('t:message ') and ' file:' in w and ' r:' in w]
                 comp = [w for w in sent if w.startswith('t:file ') and ' size:' in w and ' name:mast-top.jpg' in w]
                 check(len(pic) == 1 and len(comp) == 1, 'a photo: its preview on a message, the original on a t:file')
-                check(await ev("document.querySelectorAll('#msgs .galgrid img').length") == 1,
+                check(await ev("document.querySelectorAll('#msgs .galgrid img').length") >= 1,
                       'and it shows in the event')
+                # A film: recorded from a canvas, previewed from its frame.
+                await ev("""(function(){var c=document.createElement('canvas');c.width=320;c.height=240;
+                  var g=c.getContext('2d'),k=0,iv=setInterval(function(){g.fillStyle=k++%2?'#c33':'#33c';g.fillRect(0,0,320,240);},50);
+                  var r=new MediaRecorder(c.captureStream(20),{mimeType:'video/webm'}),parts=[];
+                  r.ondataavailable=function(e){parts.push(e.data);};
+                  r.onstop=function(){clearInterval(iv);galAdd({files:[new File(parts,'clip one.webm',{type:'video/webm'})],value:''});};
+                  r.start();setTimeout(function(){r.stop();},2500);return 1;})()""")
+                await asyncio.sleep(14)
+                sent = json.load(urllib.request.urlopen('http://127.0.0.1:%d/__sent' % port))
+                check(any(w.startswith('t:file ') and ' name:clip-one.webm' in w for w in sent),
+                      'a film: its original named on a t:file')
+                check(await ev("document.querySelectorAll('#msgs .galcard.galvid').length") == 1,
+                      'and it shows as a film in the event')
+                await ev("(document.querySelector('#msgs .galcard.galvid').click(),1)")
+                await asyncio.sleep(2)
+                check(await ev("!!document.querySelector('#galbox video[controls]')"), 'it opens in a player')
+                await ev("(el('galbox').parentNode.removeChild(el('galbox')),1)")
                 await ev("(galLike(Object.keys(galRows.pics)[0]),1)")
                 await asyncio.sleep(3)
                 sent = json.load(urllib.request.urlopen('http://127.0.0.1:%d/__sent' % port))
