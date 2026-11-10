@@ -32,8 +32,10 @@ def check(ok, what):
     fails += 0 if ok else 1
 
 
-async def run(port, remote):
+async def run(port, remote, wifi=False):
     env = dict(os.environ)
+    if wifi:
+        env['MOCK_WIFI'] = '1'
     if remote:
         env['MOCK_REMOTE'] = '1'
     mock = subprocess.Popen([sys.executable, os.path.join(ROOT, 'contract', 'mock_station.py'),
@@ -72,7 +74,8 @@ async def run(port, remote):
 
             async def click(sel):
                 # A real click at the element's centre, as a finger would.
-                box = await ev("(function(){var r=document.querySelector(%s)"
+                box = await ev("(function(){var e=document.querySelector(%s);"
+                               "e.scrollIntoView({block:'center'});var r=e"
                                ".getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2];})()"
                                % json.dumps(sel))
                 for t in ('mousePressed', 'mouseReleased'):
@@ -115,6 +118,20 @@ async def run(port, remote):
                 return
             check('none yet' in text and await ev("!!document.getElementById('ad-claim')"),
                   'a station with no administrator offers the claim')
+            if wifi:
+                await asyncio.sleep(1)
+                check(await ev("el('wf-join').style.display==='none'&&el('wf-lock').style.display===''"),
+                      'a visitor cannot change the network of a station that is online')
+                urllib.request.urlopen('http://127.0.0.1:%d/__offline' % port).read()
+                await ev("(loadAdmin(),1)")
+                await asyncio.sleep(2)
+                check(await ev("el('wf-join').style.display===''"),
+                      'the station offline: a visitor may add a network')
+                await ev("(el('wf-ssid').value='cafe',el('wf-pass').value='12345678',wifiJoin(),1)")
+                await asyncio.sleep(2)
+                joins = json.loads(urllib.request.urlopen(urllib.request.Request(
+                    'http://127.0.0.1:%d/__wifi_joins' % port, method='POST', data=b'')).read())
+                check(joins == ['cafe'], 'and the station takes it: %s' % joins)
             await click('#ad-claim')
             await asyncio.sleep(2)
             me = await ev("mycall")
@@ -122,6 +139,13 @@ async def run(port, remote):
                 'http://127.0.0.1:%d/__admin' % port, method='POST', data=b'{}')).read())
             check(st['admin'] == me, 'claimed: the station names %s as administrator' % me)
             check(await ev("!!document.getElementById('ad-lp')"), 'and the settings appear')
+            if wifi:
+                await asyncio.sleep(1)
+                check(await ev("!!document.querySelector('#ad-wifi #wf-ssid')") and
+                      'home' in (await ev("document.getElementById('wf-st').innerText") or ''),
+                      'a board: Administration sets up its internet WiFi')
+                check(await ev("getComputedStyle(document.querySelector('[data-view=\\'settings\\']')).display") == 'none',
+                      'and the separate Settings entry is gone from the menu')
             await click('#ad-lp')
             await click('input[name="ad-who"][value="local"]')
             await asyncio.sleep(2)
@@ -282,6 +306,8 @@ async def run(port, remote):
 
 print('on the station\'s network')
 asyncio.run(run(8794, remote=False))
+print('a board, with an internet WiFi')
+asyncio.run(run(8796, remote=False, wifi=True))
 print('from the internet')
 asyncio.run(run(8795, remote=True))
 sys.exit(1 if fails else 0)

@@ -54,6 +54,12 @@ SERVICES = {'ok': True, 'station': 'X3MOCK', 'features': {}, 'serve': [],
                      'session': True, 'mailbox': True, 'admin': True, 'moderation': True,
                      'rooms': True, 'alerts': 'moderators'},
             'file': {'get': True, 'put': True, 'max': FILE_MAX}}
+# MOCK_WIFI: a board, which joins an internet WiFi and lists `settings`.
+if os.environ.get('MOCK_WIFI'):
+    SERVICES['page']['tabs'] = SERVICES['page']['tabs'] + ['settings']
+WIFI_JOINS = []
+WIFI = {'ok': True, 'ssid': 'home', 'up': True, 'internet': True, 'join': 'idle',
+        'why': '', 'known': [{'ssid': 'home', 'internet': True}]}
 # An active alert the station holds (XPRS.md 10.10.2).
 ROWS.append({
     'id': '3c7e21', 'ts': int(time.time()) - 30, 'bearer': 'lora', 'rssi': -80,
@@ -283,6 +289,11 @@ class H(BaseHTTPRequestHandler):
             self._send(200, sv)
         elif u.path == '/api/session':
             self._send(200, {'ok': True, 'nonce': NONCE})
+        elif u.path == '/api/wifi' and os.environ.get('MOCK_WIFI'):
+            self._send(200, WIFI)
+        elif u.path == '/__offline':     # test hook: the station loses the internet
+            WIFI.update(up=False, internet=None)
+            self._send(200, WIFI)
         elif u.path == '/api/status':
             self._send(200, {'ok': True, 'callsign': 'X1BOARD', 'board': 'mock',
                              'uptime_s': 60})
@@ -372,6 +383,17 @@ class H(BaseHTTPRequestHandler):
         n = int(self.headers.get('Content-Length') or 0)
         raw = self.rfile.read(n)
         path = urlparse(self.path).path
+        if path == '/api/wifi' and os.environ.get('MOCK_WIFI'):
+            f = parse_qs(raw.decode())
+            who = SESSIONS.get((f.get('session') or [''])[0])
+            # The station's rule: online, only the administrator moves it.
+            if WIFI['up'] and WIFI['internet'] is not False and who != ADMIN['call']:
+                return self._send(403, {'ok': False, 'error': 'the station is online: '
+                                        'only its administrator changes its network'})
+            WIFI_JOINS.append((f.get('ssid') or [''])[0])
+            return self._send(200, {'ok': True, 'join': 'joining'})
+        if path == '/__wifi_joins':
+            return self._send(200, WIFI_JOINS)
         if path.startswith('/api/xprs/file/'):
             ref = path[len('/api/xprs/file/'):]
             sha = ref_sha(ref)
