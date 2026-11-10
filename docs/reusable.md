@@ -102,3 +102,20 @@
 - **`mdImgHtml`/`mdFileHtml`/`mdPh`**: a reference drawn from the station
   (`/api/xprs/file/<ref>`) with a placeholder when it is not held, tap to try
   again.
+
+## Collections: Gallery, Music, Library (page/chat_page.html, `GAL_KINDS`)
+
+One module serves the three. Everything a kind changes is one entry of
+`GAL_KINDS` (names, accepted files, grid or list, whether items carry a
+preview); the data path is shared: `galTree` builds folders/items/files/likes
+from the room's history, `galUpload` does preview → streamed file → item →
+`t:file` for any kind, `galPut`/`galRefOf` upload and hash a file of any size
+without holding it (`sha256Init/Update/Final` in xprs_crypto.js),
+`galHeart`/`galLike` the likes, `fileIcon(ref)` a typed file icon (SVG, by
+extension in `GAL_ICONS`), `galCover(name,glyph)` a deterministic cover where
+there is no picture, `galView` the full-screen viewer, `galPlayerBar`/`galPlay`
+the music player. A fourth kind is one `GAL_KINDS` entry plus its view branch.
+
+`tool/seed_collections.py` fills a station's collections from a manifest
+through the page itself (headless Chromium), signing with a given signer
+(`xprs-server sign`): demo content, or a migration.

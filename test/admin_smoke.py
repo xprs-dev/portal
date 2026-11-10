@@ -91,6 +91,9 @@ async def run(port, remote, wifi=False):
                                 "function(e){return e.textContent})")
                 check(secs == ['Your identity', 'This station', 'This page'],
                       'the menu is grouped: %s' % secs)
+                if not wifi:
+                    check(await ev("[].every.call(document.querySelectorAll('#side [data-r=gallery],#side [data-r=music],#side [data-r=library]'),function(e){return e.className.indexOf('off')>=0})"),
+                          'without storage, Gallery, Music and Library are shown disabled')
                 await click('.menu-btn')
                 check(await ev(is_open), 'the menu opens')
                 await click('#msgs')
@@ -344,6 +347,42 @@ async def run(port, remote, wifi=False):
                 check(any(w.startswith('t:reaction ') and ' add:like' in w for w in sent), 'a like is a t:reaction add:like')
                 check('1' in (await ev("(document.querySelector('#msgs .galike.on')||{}).textContent") or ''),
                       'and is counted')
+                # Music: an album, a track that plays, a like.
+                await ev("(switchRoom('music'),1)")
+                await asyncio.sleep(2)
+                await ev("(el('gc-name').value='Concerts',galNewCategory(),1)")
+                await asyncio.sleep(3)
+                await ev("(el('ge-title').value='Live at the hall',galNewEvent(),1)")
+                await asyncio.sleep(3)
+                check(await ev("galKind==='music'&&galEvent&&galEvent.title==='live-at-the-hall'"), 'Music: a category and an album')
+                await ev("""(function(){var n=8000,b=new ArrayBuffer(44+n),v=new DataView(b),w=function(o,s){for(var i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};
+                  w(0,'RIFF');v.setUint32(4,36+n,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+                  v.setUint32(24,8000,true);v.setUint32(28,8000,true);v.setUint16(32,1,true);v.setUint16(34,8,true);w(36,'data');v.setUint32(40,n,true);
+                  for(var i=0;i<n;i++)v.setUint8(44+i,128+Math.round(60*Math.sin(i/4)));
+                  galAdd({files:[new File([b],'First Song.wav',{type:'audio/wav'})],value:''});return 1;})()""")
+                await asyncio.sleep(6)
+                sent = json.load(urllib.request.urlopen('http://127.0.0.1:%d/__sent' % port))
+                check(any(w.startswith('t:file ') and ' name:first-song.wav' in w for w in sent) and
+                      not any(w.startswith('t:message ') and ' m:first-song' in w and ' file:' in w for w in sent),
+                      'a track: no preview, its file on a t:file')
+                check(await ev("document.querySelectorAll('#msgs .galrow .galplay').length") == 1, 'listed with a play button')
+                await ev("(document.querySelector('#msgs .galplay').click(),1)")
+                await asyncio.sleep(2)
+                check(await ev("(el('gal-player').src||'').indexOf('/api/xprs/file/')>=0"), 'and it plays in the album player')
+                await ev("(galLike(Object.keys(galRows.pics)[0]),1)")
+                await asyncio.sleep(3)
+                check(await ev("!!document.querySelector('#msgs .galrow .galike.on')"), 'a track is liked')
+                # Library: any file, with an icon for its type.
+                await ev("(switchRoom('library'),1)")
+                await asyncio.sleep(2)
+                await ev("(el('gc-name').value='Manuals',galNewCategory(),1)")
+                await asyncio.sleep(3)
+                await ev("(el('ge-title').value='Radios',galNewEvent(),1)")
+                await asyncio.sleep(3)
+                await ev("(galAdd({files:[new File(['%PDF-1.4 demo'],'Radio Manual.pdf',{type:'application/pdf'}),new File(['PK zip'],'firmware.zip',{type:'application/zip'})],value:''}),1)")
+                await asyncio.sleep(8)
+                labels = await ev("[].map.call(document.querySelectorAll('#msgs .galrow .ficon text'),function(t){return t.textContent}).sort().join(',')")
+                check(labels == 'PDF,ZIP', 'Library: any file, each with its icon: %s' % labels)
                 await ev("(switchRoom('local'),1)")
     finally:
         chrome.terminate()

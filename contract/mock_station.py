@@ -58,6 +58,7 @@ SERVICES = {'ok': True, 'station': 'X3MOCK', 'features': {}, 'serve': [],
 if os.environ.get('MOCK_WIFI'):
     SERVICES['page']['tabs'] = SERVICES['page']['tabs'] + ['settings']
     SERVICES['page']['gallery'] = True   # a board with a card keeps photographs
+    SERVICES['page']['storage'] = True   # and music and files
 WIFI_JOINS = []
 WIFI = {'ok': True, 'ssid': 'home', 'up': True, 'internet': True, 'join': 'idle',
         'why': '', 'known': [{'ssid': 'home', 'internet': True}]}
@@ -304,7 +305,7 @@ class H(BaseHTTPRequestHandler):
             room = parse_qs(u.query)['topics'][0]
             if room not in ROOMS:
                 return self._send(404, {'ok': False, 'error': 'no such room'})
-            if ROOMS[room].get('kind') not in ('forum', 'gallery'):
+            if ROOMS[room].get('kind') not in ('forum', 'gallery', 'music', 'library'):
                 return self._send(400, {'ok': False, 'error': 'not a forum room'})
             self._send(200, {'ok': True, 'room': room, 'topics': forum_topics(room)})
         elif u.path == '/api/rooms':
@@ -604,7 +605,7 @@ class H(BaseHTTPRequestHandler):
                 if m is None:
                     return self._send(404, {'ok': False, 'error': 'no such room'})
                 typ = wire[2:wire.index(' ')]
-                if m.get('kind') == 'gallery':
+                if m.get('kind') in ('gallery', 'music', 'library'):
                     # API-HTTP.md: the room's staff adds events and pictures,
                     # readers like.
                     staff = f == ADMIN['call'] or ROOM_ROLES.get((g, f)) == 'mod'
@@ -615,7 +616,7 @@ class H(BaseHTTPRequestHandler):
                 elif (m['visibility'] == 'private' or m['posting'] != 'anyone') \
                         and ROOM_ROLES.get((g, f)) not in ('member', 'mod'):
                     return self._send(403, {'ok': False, 'error': 'only members post in this room'})
-                if typ == 'blog' and m.get('kind') not in ('forum', 'gallery'):
+                if typ == 'blog' and m.get('kind') not in ('forum', 'gallery', 'music', 'library'):
                     return self._send(403, {'ok': False, 'error': 'posts go in a forum room'})
                 SENT.append(wire)
                 # The mock files a part as a row like any other (the real engine
