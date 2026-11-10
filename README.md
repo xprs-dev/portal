@@ -1,4 +1,6 @@
-# webchat
+# portal
+
+*(Formerly `webchat`; renamed 2026-11-10. GitHub redirects the old URL.)*
 
 The chat page a visitor gets in a browser, with no install and no account: join
 a station's WiFi, open the page, talk to the mesh. One page, two editions:

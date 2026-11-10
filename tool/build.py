@@ -57,7 +57,7 @@ def main():
         f.write(gz)
     if a.c:
         with open(a.c, 'w') as f:
-            f.write('/* GENERATED from webchat/page by webchat/tool/build.py '
+            f.write('/* GENERATED from portal/page by portal/tool/build.py '
                     '-- edit those, not this.\n *\n'
                     ' * Stored gzipped and served with Content-Encoding: gzip.\n'
                     ' * %d bytes of page -> %d bytes of flash. */\n'
