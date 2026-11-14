@@ -158,6 +158,28 @@ async def run(port, remote, wifi=False):
             check(got == {'local_private': False, 'who_may_post': 'local', 'who_may_alert': 'moderators'},
                   'changed settings reach the station: %s' % st['settings'])
 
+            # Where the station is: a country chosen from the list is its
+            # centre and radius, announced as pos (no decimals) and acc.
+            n = await ev("document.querySelectorAll('#ps-country option').length")
+            check((n or 0) > 200, 'the country list is offered (%s options)' % n)
+            await ev("(el('ps-country').value='PT',posCountryPick('PT'),1)")
+            await click('[onclick="posSave()"]')
+            await asyncio.sleep(2)
+            st = json.loads(urllib.request.urlopen(urllib.request.Request(
+                'http://127.0.0.1:%d/__admin' % port, method='POST', data=b'{}')).read())
+            s2 = st['settings']
+            check(s2.get('pos') == '40,-8' and s2.get('acc') == 171000 and s2.get('page_pos') == '39.6,-8,171',
+                  'a country reaches the station as its centre and radius: %s %s %s'
+                  % (s2.get('pos'), s2.get('acc'), s2.get('page_pos')))
+            await ev("(el('ps-country').value='',posCountryPick(''),el('ps-lat').value='38.72231',"
+                     "el('ps-lon').value='-9.13934',el('ps-r').value='1',1)")
+            await click('[onclick="posSave()"]')
+            await asyncio.sleep(2)
+            s2 = json.loads(urllib.request.urlopen(urllib.request.Request(
+                'http://127.0.0.1:%d/__admin' % port, method='POST', data=b'{}')).read())['settings']
+            check(s2.get('acc') == 1000 and len(s2.get('pos', '').split(',')[0].split('.')[-1]) == 2,
+                  'a spot within 1 km is announced to two decimals: %s %s' % (s2.get('pos'), s2.get('acc')))
+
             # Moderation (XPRS.md 10.10).
             def station():
                 return json.loads(urllib.request.urlopen(urllib.request.Request(

@@ -153,7 +153,7 @@ def forum_topics(room):
 ADMIN = {'call': None}
 SETTINGS = {'local_private': True, 'who_may_post': 'everyone', 'who_may_alert': 'moderators',
             'reach_alerts': 'regional', 'reach_posts': 'regional', 'reach_chat': 'global',
-            'follow': '', 'peers_mode': 'open', 'peers': ''}
+            'follow': '', 'peers_mode': 'open', 'peers': '', 'pos': '', 'acc': 0}
 LOCAL = not os.environ.get('MOCK_REMOTE')
 
 
@@ -461,6 +461,12 @@ class H(BaseHTTPRequestHandler):
                         # The same shapes the station checks (API-HTTP.md).
                         if k.startswith('reach_') and v not in ('local', 'regional', 'global'):
                             return self._send(400, {'ok': False, 'error': '%s must be local, regional or global' % k})
+                        if k == 'pos' and not (v == '' or (isinstance(v, str) and re.match(
+                                r'^-?\d{1,3}(\.\d{1,5})?,-?\d{1,3}(\.\d{1,5})?$', v)
+                                and abs(float(v.split(',')[0])) <= 90 and abs(float(v.split(',')[1])) <= 180)):
+                            return self._send(400, {'ok': False, 'error': 'pos is "lat,lon" in degrees, at most 5 decimals'})
+                        if k == 'acc' and not (isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 3000000):
+                            return self._send(400, {'ok': False, 'error': 'acc is metres, 0 to 3000000'})
                         if k == 'peers_mode' and v not in ('open', 'named'):
                             return self._send(400, {'ok': False, 'error': 'peers_mode must be open or named'})
                         if k in ('peers', 'follow'):
