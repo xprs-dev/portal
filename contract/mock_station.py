@@ -117,6 +117,17 @@ if os.environ.get('MOCK_FORUM'):
                          'm:A 1:1 current balun. It was the wire, not the balun.'})
 
 
+def may_read_room(room, token):
+    """Anyone for a public room; its members and the administrator for a private one."""
+    m = ROOMS.get(room)
+    if m is None:
+        return False
+    if m['visibility'] != 'private':
+        return True
+    who = SESSIONS.get(token)
+    return who == ADMIN['call'] or ROOM_ROLES.get((room, who)) in ('member', 'mod')
+
+
 def forum_topics(room):
     """The index: titled posts, newest edition per author and title, replies counted."""
     posts = [r for r in ROWS if r['to'] == room and r['type'] == 'blog'
@@ -180,6 +191,7 @@ def admin_state(token):
     return st
 SESSIONS = {}      # token -> callsign
 NONCE = 'c0ffee0123456789'
+FILE_ROOM = {}     # file digest -> the hosted room it was posted in
 ADDRESSED = []     # rows only a session may read (to be set by /__inject)
 KEYS = {}          # callsign -> x-only pubkey bytes, from t:identity k:npub
 MAILBOX = {}       # callsign -> hold: list from its verified t:mailbox
@@ -373,8 +385,13 @@ class H(BaseHTTPRequestHandler):
                 return self._send(400, {'ok': False, 'error': 'not a file reference'})
             if sha not in FILES:
                 return self._send(404, {'ok': False, 'error': 'not held'})
+            # XPRS.md 11.2: a file posted in a hosted room is served to
+            # whoever may read that room, decided at each ask.
+            room = FILE_ROOM.get(sha)
+            if room and not may_read_room(room, (parse_qs(u.query).get('session') or [''])[0]):
+                return self._send(403, {'ok': False, 'error': 'not a public file'})
             data, ctype = FILES[sha]
-            self._send(200, data, ctype, {'Cache-Control': 'public, max-age=31536000, immutable',
+            self._send(200, data, ctype, {'Cache-Control': '%s, max-age=31536000, immutable' % ('private' if room else 'public'),
                                           'ETag': '"%s"' % sha})
         elif u.path == '/__sent':
             self._send(200, SENT)
@@ -401,11 +418,17 @@ class H(BaseHTTPRequestHandler):
             sha = ref_sha(ref)
             if not sha:
                 return self._send(400, {'ok': False, 'error': 'not a file reference'})
+            q = parse_qs(urlparse(self.path).query)
+            room = (q.get('room') or [''])[0].upper()
+            if room and (room not in ROOMS or not may_read_room(room, (q.get('session') or [''])[0])):
+                return self._send(403, {'ok': False, 'error': 'not a room you read'})
             if len(raw) > FILE_MAX:
                 return self._send(413, {'ok': False, 'error': 'larger than this station keeps'})
             if hashlib.sha256(raw).hexdigest() != sha:
                 return self._send(400, {'ok': False, 'error': 'the bytes do not match the reference'})
             FILES[sha] = (raw, FILE_TYPES.get(ref.rsplit('.', 1)[1], 'application/octet-stream'))
+            if room:
+                FILE_ROOM.setdefault(sha, room)
             return self._send(200, {'ok': True, 'ref': ref, 'size': len(raw)})
         body = raw.decode()
         if path == '/api/session':
@@ -625,6 +648,10 @@ class H(BaseHTTPRequestHandler):
                 if typ == 'blog' and m.get('kind') not in ('forum', 'gallery', 'music', 'library'):
                     return self._send(403, {'ok': False, 'error': 'posts go in a forum room'})
                 SENT.append(wire)
+                for r in re.findall(r'(?<![A-Za-z0-9_.-])file:([A-Za-z0-9_-]+\.[a-z0-9]{1,8})', wire):
+                    h = ref_sha(r)
+                    if h:
+                        FILE_ROOM[h] = g     # the newest post wins (11.2)
                 # The mock files a part as a row like any other (the real engine
                 # holds a split post until its last part verifies, 9.1.1).
                 ROWS.append({'id': 'r%05x' % len(SENT), 'ts': int(time.time()), 'bearer': 'web',

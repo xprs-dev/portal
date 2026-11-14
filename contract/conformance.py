@@ -81,6 +81,16 @@ def http(method, path, body=None, query=''):
                 req.add_header('Content-Type', 'application/json')
 
 
+def fetch(path, query=''):
+    """The status of a GET whose answer may be a file's bytes."""
+    try:
+        with urllib.request.urlopen(BASE + path + (('?' + query) if query else ''), timeout=180) as r:
+            r.read()
+            return r.status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+
 def files(caps):
     """GET/POST /api/xprs/file/<ref> (API-HTTP.md, XPRS.md 7.7)."""
     data = os.urandom(512)
@@ -315,8 +325,28 @@ def main():
     check(any('hello room %d' % seed in r.get('wire', '') for r in hr.get('rows', [])), 'a public room is read by anybody')
     check(not any('hello room %d' % seed in r.get('wire', '') for r in carol.history(kind='message', limit='50').get('rows', [])),
           'and its message is not in the open rooms')
+    # A file posted in the room is the room's (XPRS.md 11.2), served to
+    # whoever may read it, decided at each ask.
+    pic = pref = None
+    if sv.get('file', {}).get('put'):
+        pic = os.urandom(700)
+        pref = base64.urlsafe_b64encode(hashlib.sha256(pic).digest()).decode().rstrip('=') + '.jpg'
+        st, _ = http('POST', '/api/xprs/file/' + pref, pic, query='room=%s&session=%s' % (room, bob.session))
+        check(st == 200, 'a member stores a picture naming the room')
+        st, _ = bob.send('t:message f:%s d:%s ts:%s file:%s m:picture' % (bob.call, room, ts(), pref))
+        check(st == 200, 'and posts it there')
+        check(fetch('/api/xprs/file/' + pref) == 200, "a public room's picture is anybody's")
+        stray = os.urandom(300)
+        sref = base64.urlsafe_b64encode(hashlib.sha256(stray).digest()).decode().rstrip('=') + '.jpg'
     st, d = alice.rooms('update', call=room, visibility='private')
     check(st == 200 and [r for r in d['rooms'] if r['call'] == room][0]['posting'] == 'members', 'made private: members-only')
+    if pic:
+        check(fetch('/api/xprs/file/' + pref) == 403, 'made private, its picture is refused without a session')
+        check(fetch('/api/xprs/file/' + pref, 'session=' + carol.session) == 403, 'and to carol, no member')
+        st = fetch('/api/xprs/file/' + pref, 'session=' + bob.session)
+        check(st == 200, 'but served to bob, a member')
+        check(http('POST', '/api/xprs/file/' + sref, stray, query='room=%s&session=%s' % (room, carol.session))[0] == 403,
+              'carol cannot store a file naming the private room')
     check(not any(r['call'] == room for r in carol.rooms()[1].get('rooms', [])), 'a private room is not listed to carol')
     check(http('GET', '/api/xprs/history', query='room=%s&session=%s' % (room, carol.session))[0] == 404, 'nor served to her')
     check(any('hello room %d' % seed in r.get('wire', '') for r in bob.history(kind='message', room=room, limit='50').get('rows', [])), 'but to its member')
