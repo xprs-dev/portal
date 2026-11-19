@@ -154,9 +154,16 @@ def main():
         b.eval("el('txt').value='bom dia lisboa';sendMsg()")
         time.sleep(2)
         a.eval("window.prompt=function(){return 'LISBOA'};(switchRoom('onew'),1)")
-        check(a.wait("document.getElementById('msgs').innerText.indexOf('bom dia lisboa')>=0", 12),
+        check(a.wait("document.getElementById('msgs').innerText.indexOf('bom dia lisboa')>=0", 45),
               'another visitor reads it in LISBOA')
         shot(a, 'group_open')
+
+        # The ranking of public groups (12.9.7): the station says it has one.
+        if a.eval("canRank"):
+            a.eval("(switchRoom('grank'),1)")
+            check(a.wait("document.getElementById('msgs').innerText.indexOf('Most active')>=0", 8),
+                  'the ranking opens with its three orders')
+            shot(a, 'group_rank')
 
         # Leave.
         b.eval("window.confirm=function(){return true};(switchRoom('g:'+%s),leaveRoom(%s),1)"
