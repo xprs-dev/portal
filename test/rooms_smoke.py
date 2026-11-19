@@ -67,6 +67,7 @@ def main():
         a.wait("!!document.getElementById('ad-claim')")
         a.eval("document.getElementById('ad-claim').click()")
         check(a.wait('isStationAdmin', 10), 'the first visitor claims the station')
+        a.eval("(showTab('chat'),1)")
 
         a.eval("roomPost({action:'create',name:'Block C',visibility:'public',"
                "posting:'members'},function(j){window.__room=j.room;})")
@@ -79,7 +80,18 @@ def main():
         check(a.wait("loadRooms(function(){}),hostedByCall[%s]&&hostedByCall[%s].role==='mod'"
                      % (json.dumps(room), json.dumps(room)), 10), 'the administrator moderates it')
 
-        a.eval("roomPost({action:'add',call:%s,member:%s})" % (json.dumps(room), json.dumps(bob)))
+        # Bob is no member: he may ask to join (10.3), and only staff read it.
+        b.eval("loadRooms(function(){switchRoom('g:'+%s)})" % json.dumps(room))
+        check(b.wait("!el('txt').disabled&&el('txt').placeholder.indexOf('Ask to join')==0", 8),
+              'a visitor who is no member is offered to ask to join')
+        shot(b, 'room_ask')
+        b.eval("el('txt').value='may I join?';sendMsg()")
+        time.sleep(2)
+        a.eval("loadRooms(function(){switchRoom('g:'+%s)})" % json.dumps(room))
+        check(a.wait("!!document.querySelector('#msgs [data-grant]')", 10),
+              'the administrator sees the request, with Invite')
+        shot(a, 'room_request')
+        a.eval("document.querySelector('#msgs [data-grant]').click()")
         time.sleep(1.5)
         b.eval("loadRooms(function(){switchRoom('g:'+%s)})" % json.dumps(room))
         b.wait("!!document.querySelector('#msgs .roomnote button')")
