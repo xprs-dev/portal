@@ -147,6 +147,17 @@ def main():
         check(b.wait("loadRooms(function(){}),hostedByCall[%s].state==='open'&&hostedByCall[%s].can_post"
                      % (json.dumps(room), json.dumps(room)), 10), 'opened: the member may write again')
 
+        # An open group by name (XPRS.md 7.3): followed, written, read.
+        b.eval("window.prompt=function(){return 'lisboa'};(switchRoom('onew'),1)")
+        check(b.wait("curRoom==='o:LISBOA'&&myGroups.indexOf('LISBOA')>=0", 5),
+              'a visitor follows the open group LISBOA by name')
+        b.eval("el('txt').value='bom dia lisboa';sendMsg()")
+        time.sleep(2)
+        a.eval("window.prompt=function(){return 'LISBOA'};(switchRoom('onew'),1)")
+        check(a.wait("document.getElementById('msgs').innerText.indexOf('bom dia lisboa')>=0", 12),
+              'another visitor reads it in LISBOA')
+        shot(a, 'group_open')
+
         # Leave.
         b.eval("window.confirm=function(){return true};(switchRoom('g:'+%s),leaveRoom(%s),1)"
                % (json.dumps(room), json.dumps(room)))
