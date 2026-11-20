@@ -29,7 +29,7 @@ from cdp import Cdp  # noqa: E402
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--server', required=True)
-ap.add_argument('--board', required=True)
+ap.add_argument('--board', required=True, action='append', help='a board\'s page; repeat for several')
 ap.add_argument('--phone', required=True)
 ap.add_argument('--wait', type=float, default=120, help='seconds to wait for a packet to cross')
 ap.add_argument('--shots', default=os.environ.get('SHOTS', ''))
@@ -107,81 +107,80 @@ def shows(c, text):
 
 
 def main():
-    s = browser(args.server, 's')
-    b = browser(args.board, 'b')
+    names = ['server'] + ['board %d' % (k + 1) for k in range(len(args.board))]
+    urls = [args.server] + args.board
+    pages = [browser(u, 'p%d' % k) for k, u in enumerate(urls)]
     try:
-        sc, bc = s.wait('mycall', 60), b.wait('mycall', 180)
-        if not check(bool(sc and bc), 'both visitors have keys'):
-            return
+        calls = [c.wait('mycall', 60 if k == 0 else 180) for k, c in enumerate(pages)]
         me = phone('GET', '/api/status').get('callsign') or ''
-        print('visitors: server %s, board %s; phone %s; run %s' % (sc, bc, me, T))
-        # Each visitor's identity goes out, so the phone can verify them.
-        for c in (s, b):
+        print('phone %s; visitors %s; run %s' % (me, ', '.join('%s %s' % x for x in zip(names, calls)), T))
+        if not check(all(calls), 'every visitor has a key'):
+            return
+        for c in pages:
             c.eval("sendIdentity()")
 
+        def reads(c, text):
+            return until(lambda: c.eval("loadGroup(),1") and shows(c, text))
+
         print('1. open group LISBOA')
-        # The phone follows it, as its Chat does when its owner opens the room
-        # (an older phone build has no such call: open #LISBOA in Chat first).
         try:
             phone('POST', '/api/xprs/group/follow', {'d': 'LISBOA'})
         except Exception:
             pass
-        for c in (s, b):
-            check(follow(c, 'LISBOA'), 'a browser follows LISBOA')
+        for c, n in zip(pages, names):
+            check(follow(c, 'LISBOA'), 'the %s visitor follows LISBOA' % n)
         phone('POST', '/api/xprs/send', {'type': 'message', 'd': 'LISBOA', 'm': 'phone ' + T, 'private': False})
-        check(until(lambda: s.eval("loadGroup(),1") and shows(s, 'phone ' + T)),
-              'the server\'s visitor reads the phone\'s post')
-        check(until(lambda: b.eval("loadGroup(),1") and shows(b, 'phone ' + T)),
-              'the board\'s visitor reads the phone\'s post')
-        post(s, 'server ' + T)
-        check(until(lambda: phone_has('LISBOA', 'server ' + T)), 'the phone reads the server visitor\'s post')
-        check(until(lambda: b.eval("loadGroup(),1") and shows(b, 'server ' + T)),
-              'the board\'s visitor reads it too')
-        post(b, 'board ' + T)
-        check(until(lambda: phone_has('LISBOA', 'board ' + T)), 'the phone reads the board visitor\'s post')
-        check(until(lambda: s.eval("loadGroup(),1") and shows(s, 'board ' + T)),
-              'the server\'s visitor reads it too')
-        shot(s, 'interop_open_server')
-        shot(b, 'interop_open_board')
+        for c, n in zip(pages, names):
+            check(reads(c, 'phone ' + T), 'the %s visitor reads the phone\'s post' % n)
+        for k, (c, n) in enumerate(zip(pages, names)):
+            text = '%s says %s' % (n, T)
+            post(c, text)
+            check(until(lambda: phone_has('LISBOA', text)), 'the phone reads the %s visitor\'s post' % n)
+            for c2, n2 in zip(pages, names):
+                if c2 is not c:
+                    check(reads(c2, text), 'the %s visitor reads the %s visitor\'s post' % (n2, n))
+        for c, n in zip(pages, names):
+            shot(c, 'interop_open_' + n.replace(' ', ''))
 
         print('2. a closed group made on the phone')
         g = phone('POST', '/api/xprs/group/create', {'nick': 'Interop ' + T}).get('group')
         check(bool(g), 'the phone makes a group: %s' % g)
-        r = phone('POST', '/api/xprs/group/grant', {'d': g, 'calls': '%s,%s' % (sc, bc)})
-        check(r.get('ok'), 'the phone invites both visitors')
-        for c, who in ((s, 'server'), (b, 'board')):
+        r = phone('POST', '/api/xprs/group/grant', {'d': g, 'calls': ','.join(calls)})
+        check(r.get('ok'), 'the phone invites every visitor')
+        for c, n in zip(pages, names):
             follow(c, g)
             c.eval("delete groupInfo[%s]" % json.dumps(g))
             ok = until(lambda: c.eval("(groupInfo[%s]||{}).askedAt=0,loadGroup(),1" % json.dumps(g)) and c.eval(
                 "!!(groupInfo[%s]&&groupInfo[%s].role==='invited'&&groupInfo[%s].offer)"
                 % (json.dumps(g), json.dumps(g), json.dumps(g))))
-            check(ok, 'the %s\'s visitor finds the invitation' % who)
-            shot(c, 'interop_invited_' + who)
+            check(ok, 'the %s visitor finds the invitation' % n)
+            shot(c, 'interop_invited_' + n.replace(' ', ''))
             c.eval("acceptGroup(%s)" % json.dumps(g))
+
         def members():
             j = phone('GET', '/api/xprs/group', q={'d': g})
             roles = j.get('roles') or {}
-            return roles.get(sc) == 'member' and roles.get(bc) == 'member' and j
+            return all(roles.get(x) == 'member' for x in calls) and j
         j = until(members)
-        check(bool(j), 'the phone\'s record has both as members')
+        check(bool(j), 'the phone\'s record has every visitor as a member')
         if not j:
             print('   phone record:', json.dumps(phone('GET', '/api/xprs/group', q={'d': g}))[:600])
-        post(s, 'member on server ' + T)
-        check(until(lambda: phone_has(g, 'member on server ' + T)), 'the phone reads the server member\'s post')
-        post(b, 'member on board ' + T)
-        check(until(lambda: phone_has(g, 'member on board ' + T)), 'the phone reads the board member\'s post')
         phone('POST', '/api/xprs/send', {'type': 'message', 'd': g, 'm': 'admin ' + T, 'private': False})
-        check(until(lambda: s.eval("loadGroup(),1") and shows(s, 'admin ' + T)),
-              'the server\'s member reads the phone\'s post in the group')
-        check(until(lambda: b.eval("loadGroup(),1") and shows(b, 'admin ' + T)),
-              'the board\'s member reads it')
-        check(until(lambda: s.eval("loadGroup(),1") and shows(s, 'member on board ' + T)),
-              'the server\'s member reads the board member\'s post')
-        shot(s, 'interop_group_server')
-        shot(b, 'interop_group_board')
+        for c, n in zip(pages, names):
+            check(reads(c, 'admin ' + T), 'the %s member reads the phone\'s post in the group' % n)
+        for c, n in zip(pages, names):
+            text = 'member on %s %s' % (n, T)
+            post(c, text)
+            check(until(lambda: phone_has(g, text)), 'the phone reads the %s member\'s post' % n)
+            for c2, n2 in zip(pages, names):
+                if c2 is not c:
+                    check(reads(c2, text), 'the %s member reads the %s member\'s post' % (n2, n))
+        for c, n in zip(pages, names):
+            shot(c, 'interop_group_' + n.replace(' ', ''))
+        print('   group %s' % g)
     finally:
-        s.close()
-        b.close()
+        for c in pages:
+            c.close()
     print('FAILED' if fails else 'all passed')
     sys.exit(1 if fails else 0)
 
