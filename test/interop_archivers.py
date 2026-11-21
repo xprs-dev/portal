@@ -17,9 +17,9 @@ Usage:
     python3 test/interop_archivers.py --server ../server/build/xprs-server-linux-arm64
         [--keep] [--dir /path/for/the/two/stations]
 
-Both stations sit on the machine's LAN lane like any station, so they hear
-and relay what is on the air there for as long as the run lasts (about a
-minute). --keep leaves their folders and logs behind for reading.
+Both stations run with --no-lan: they reach each other only through their
+Reticulum link, and neither hears nor relays what is on the machine's real
+network. --keep leaves their folders and logs behind for reading.
 """
 import argparse
 import base64
@@ -84,7 +84,7 @@ class Station:
             [binary, 'run', '--config', cfg, '--data-dir', self.dir,
              '--http-address', '127.0.0.1', '--http-port', str(http_port),
              '--rns-port', str(rns_port), '--hub', f'127.0.0.1:{hub_port}',
-             '--nickname', 'interop-' + name, '--no-public-name', '--no-upnp',
+             '--nickname', 'interop-' + name, '--no-public-name', '--no-upnp', '--no-lan',
              '--auto-update', 'off', '--log-file', self.log],
             cwd=root, stdout=self.out, stderr=subprocess.STDOUT)
         self.call = ''
