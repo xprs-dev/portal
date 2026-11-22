@@ -119,3 +119,13 @@ the music player. A fourth kind is one `GAL_KINDS` entry plus its view branch.
 `tool/seed_collections.py` fills a station's collections from a manifest
 through the page itself (headless Chromium), signing with a given signer
 (`xprs-server sign`): demo content, or a migration.
+
+## Groups with a callsign (2026-11-22)
+
+- `noteSubs(g, subs)` / `groupUp` / `groupTree(g, depth)`: the folders of a
+  group (XPRS.md 10.2) from the station's `group.subs`, drawn on the list of
+  rooms and inside the group. A folder is a room `o:<callsign>` and needs no
+  following.
+- `askToJoin(g)` / `joinAsked(g)`: a non-member's one request a day; the
+  message box of a group with a callsign opens only for a member
+  (`drawGroupNote`). Use the same pair wherever writing needs admission.

@@ -69,7 +69,28 @@ def main():
         time.sleep(1.5)
         check(c.eval('curRoom') == 'o:X5ABCD', 'the address changing switches the group', c.eval('curRoom'))
         note = c.eval("document.getElementById('msgs').innerText") or ''
-        check('asks to join' in note, 'a group with a callsign: what a non-member writes asks to join', note[:90])
+        check('its members write' in note, 'a group with a callsign: anyone reads, its members write', note[:90])
+        check(c.eval("document.getElementById('txt').disabled") is True,
+              'a non-member has no message box there')
+        check('Ask to join' in note, 'and is offered Ask to join')
+        # Its folders (10.2), as the station lists them with the group.
+        c.eval("groupInfo.X5ABCD=groupInfo.X5ABCD||{};groupInfo.X5ABCD.subs=[{g:'X5SUB1',name:'Recipes'}];"
+               "noteSubs('X5ABCD',groupInfo.X5ABCD.subs);renderSide();drawGroupNote('X5ABCD')")
+        time.sleep(0.3)
+        side = c.eval("document.getElementById('side').innerText") or ''
+        check('Recipes' in side, 'a folder of the group is on the list of rooms', side[-120:])
+        note = c.eval("document.getElementById('msgs').innerText") or ''
+        check('Recipes' in note, 'and offered inside the group')
+        c.eval("switchRoom('o:X5SUB1')")
+        time.sleep(1.5)
+        check(c.eval('curRoom') == 'o:X5SUB1', 'a folder opens as a room of its own', c.eval('curRoom'))
+        note = c.eval("document.getElementById('msgs').innerText") or ''
+        check('X5ABCD' in note or 'Stop following' not in note, 'with the way back up to its group', note[:120])
+        c.eval("switchRoom('o:X5ABCD')")
+        time.sleep(1)
+        # A member writes.
+        c.eval("groupInfo.X5ABCD.role='member';drawGroupNote('X5ABCD')")
+        check(c.eval("document.getElementById('txt').disabled") is False, 'a member has the message box')
         check(c.eval("groupLink('X5ABCD')") == 'https://xprs.dev/in/x5abcd',
               'its link is xprs.dev/in/<x5 callsign>', c.eval("groupLink('X5ABCD')"))
         shot(c, 'group-x5')
