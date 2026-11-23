@@ -129,3 +129,21 @@ through the page itself (headless Chromium), signing with a given signer
 - `askToJoin(g)` / `joinAsked(g)`: a non-member's one request a day; the
   message box of a group with a callsign opens only for a member
   (`drawGroupNote`). Use the same pair wherever writing needs admission.
+
+## A room's head and the message box (2026-11-23)
+
+- `IC.share` / `IC.open` / `IC.star` / `IC.staron` / `IC.folder`: inline SVG
+  icons, drawn in the text colour. Use these (and add to the set) instead of
+  emoji, which come out as empty boxes on a device without the font.
+- `.icb`: a square icon button (38 px, `.on` when active); `.grpsec`: a small
+  section heading with a rule; `.grpfolds` / `.grpfold`: a grid of rows that
+  each open something. The group head (`drawGroupNote`) is built from them
+  and any other "title, actions, list of places" head should be too.
+- The message box hides itself wherever it is disabled: setting
+  `el('txt').disabled` is the one switch (hooked once, beside `snack`). Never
+  leave a disabled box on the page with an explanation in its placeholder.
+- `shutBar(html)`: what stands where the box would be when nobody may write
+  but there is something to do instead (Ask to join, Join an invitation).
+  `switchRoom` clears it; an empty string hides it.
+- `groupOpenHere(g)`: is the room being read inside group `g`? The list of
+  rooms shows a group's folders only then.

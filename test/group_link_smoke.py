@@ -58,7 +58,7 @@ def main():
         note = c.eval("document.getElementById('msgs').innerText") or ''
         check('open group' in note.lower(), 'the page says it is an open group', note[:80])
         check(c.eval("!document.getElementById('txt').disabled") is True, 'a visitor can write in it')
-        check('Share link' in note, 'Share link is offered')
+        check(c.eval("!!document.querySelector('#grpnote [aria-label=\"Share link\"]')") is True, 'Share link is offered')
         check('Open in XPRS' not in note, "no 'Open in XPRS' on a station's own page")
         check(c.eval("groupLink('LISBOA')") == 'https://xprs.dev/in/g/lisboa',
               'its link is xprs.dev/in/g/<name>', c.eval("groupLink('LISBOA')"))
@@ -69,10 +69,13 @@ def main():
         time.sleep(1.5)
         check(c.eval('curRoom') == 'o:X5ABCD', 'the address changing switches the group', c.eval('curRoom'))
         note = c.eval("document.getElementById('msgs').innerText") or ''
-        check('its members write' in note, 'a group with a callsign: anyone reads, its members write', note[:90])
+        check('members write' in note, 'a group with a callsign: its members write', note[:90])
         check(c.eval("document.getElementById('txt').disabled") is True,
               'a non-member has no message box there')
-        check('Ask to join' in note, 'and is offered Ask to join')
+        check(c.eval("document.querySelector('.input-area').offsetHeight") == 0,
+              'and the box is not on the page at all')
+        check('Ask to join' in (c.eval("document.getElementById('shutbar').innerText") or ''),
+              'and is offered Ask to join, where the box would be')
         # Its folders (10.2), as the station lists them with the group.
         c.eval("groupInfo.X5ABCD=groupInfo.X5ABCD||{};groupInfo.X5ABCD.subs=[{g:'X5SUB1',name:'Recipes'}];"
                "noteSubs('X5ABCD',groupInfo.X5ABCD.subs);renderSide();drawGroupNote('X5ABCD')")
