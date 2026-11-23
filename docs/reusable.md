@@ -147,3 +147,9 @@ through the page itself (headless Chromium), signing with a given signer
   `switchRoom` clears it; an empty string hides it.
 - `groupOpenHere(g)`: is the room being read inside group `g`? The list of
   rooms shows a group's folders only then.
+- `groupCount(g)` / `groupNew(g)` / `groupSeenSet(g, n)`: a room's held
+  message count from the station (`n` in the group record and in each of its
+  `subs`) and what is new since this browser last had it open, shown as
+  "1276 (+24)" with the addition in green (`.gcnt b`, `.gnew`). The "seen"
+  number lives in the browser (`xprs_gseen`); the station keeps nothing per
+  visitor. Reuse for any list of rooms that should show unread counts.
