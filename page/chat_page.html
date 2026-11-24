@@ -426,6 +426,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;
 .grp+.daysep{margin-top:2px}
 .msg{max-width:85%}
 .daysep{align-self:center;margin:10px 0 4px;position:sticky;top:0;z-index:2}
+.daysep.under{visibility:hidden}
 .daysep span{display:inline-block;background:var(--panel);border:1px solid var(--border);color:var(--muted);
         font-size:12px;padding:3px 12px;border-radius:999px;box-shadow:0 1px 4px rgba(0,0,0,.25)}
 .msg .meta{font-size:11px;margin-bottom:2px}
@@ -1032,16 +1033,30 @@ function fileRoom(){
    the station held three letters for somebody whose page never asked for
    them (seen on a C3, 2026-11-22). Asked again, more patiently, until the
    station answers; what is asked is tiny and asking twice costs nothing. */
+/* The callsign whose login is under way: one at a time, or every caller
+ * (the station's services, choosing the extension, Administration) asked
+ * the signer for its own signature. */
+var sessAsking='';
 function ensureSession(tries){
-  if(!canSession||sess||!canSign())return;
+  if(!canSession||sess||!canSign()||sessAsking===mycall)return;
   var n=tries||0,who=mycall;
+  sessAsking=who;
+  function end(){if(sessAsking===who)sessAsking='';}
   function again(){
+    end();
     if(n<12&&!sess&&mycall===who)setTimeout(function(){ensureSession(n+1);},Math.min(3000+n*2000,15000));}
   sendIdentity();
   getJSON('/api/session',function(d){
     if(!d||!d.nonce)return again();
-    signAny('t:session f:'+mycall+' ts:'+tsNow()+' m:'+d.nonce,function(w){
-      if(!w)return;
+    signAny('t:session f:'+mycall+' ts:'+tsNow()+' m:'+d.nonce,function(w,why){
+      /* Unsigned: said, and asked once more (a signer popup can be closed
+         or lost behind another window). */
+      if(!w){
+        end();
+        if(mycall!==who)return;
+        snack('Not signed in: '+(why||'the signature failed')+(n<1?'. Asking again…':''));
+        if(n<1)setTimeout(function(){ensureSession(n+1);},1500);
+        return;}
       var x=new XMLHttpRequest();
       x.open('POST','/api/session',true);
       x.timeout=25000;
@@ -1049,7 +1064,7 @@ function ensureSession(tries){
       x.onload=function(){
         var j=null;try{j=JSON.parse(x.responseText);}catch(e){}
         if(x.status===200&&j&&j.session){
-          sess=j.session;chatLoaded=false;chatDeep=false;load();
+          end();sess=j.session;chatLoaded=false;chatDeep=false;load();
           onSession(j);
           if(tab==='admin')loadAdmin();
           if(canModerate)loadMyRole();
@@ -1059,6 +1074,7 @@ function ensureSession(tries){
           /* The station has not heard our identity yet: say it again. */
           identSent=0;again();}
         else if(x.status>=500)again();
+        else{end();snack('Not signed in: '+((j&&j.error)||'the station said '+x.status));}
       };
       x.send(JSON.stringify({wire:w}));
     });
@@ -1286,6 +1302,10 @@ function cancelReply(){
  * focus, and a vibration where the device has one. */
 var sndOn=stGet('xprs_sound')!=='0';
 var audioCtx=null,unread=0,baseTitle=document.title;
+/* Only news beeps: a message heard for the first time by this page and sent
+ * after it opened. Opening or switching a room draws its history again, and
+ * that stays quiet. */
+var noticed={},openedAt=Math.floor(Date.now()/1000)-30;
 function unlockAudio(){
   if(!audioCtx){
     try{audioCtx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}}
@@ -2022,7 +2042,9 @@ function render(row){
   if(room===null)return;
   if(room.slice(0,3)==='dm:'){dmPeers[room.slice(3)]=true;countDm(room.slice(3),row);}
   if(allRows.indexOf(row)<0)allRows.push(row);
-  if(room!==curRoom){renderSide();return;}
+  /* Heard in another room: the side list counts it; opening that room later
+   * draws it without a beep. */
+  if(room!==curRoom){noticed[wireId(w)]=1;renderSide();return;}
   /* One bubble per message (XPRS.md 5): copies that came round by other
    * relays differ only in via:, which the identifier leaves out. */
   var sk=wireId(w);
@@ -2105,7 +2127,8 @@ function render(row){
     au.style.cursor='pointer';
     au.title='Message '+row.from+' directly';
     au.onclick=function(){openDm(row.from);};
-    notice();   /* somebody else spoke: beep, vibrate, count in the title */
+    if(!noticed[sk]){noticed[sk]=1;   /* somebody else spoke: beep, vibrate, count in the title */
+      if((row.ts||0)>=openedAt)notice();}
   }
   domById[id]=d.querySelector('.likes');
   refreshLikes(id);
@@ -2183,7 +2206,20 @@ function drawDays(){
       var p=document.createElement('div');p.className='daysep';p.setAttribute('data-ts',ds-0.5);
       p.innerHTML='<span>'+esc(dayLabel(t))+'</span>';box.insertBefore(p,kids[i]);last=ds;}
   }
+  daysStuck();
 }
+/* Every day scrolled past stays stuck at the top, all at the same height:
+ * only the newest of them shows, or their pills pile up on each other. */
+function daysStuck(){
+  var box=el('msgs');if(!box)return;
+  var ps=box.querySelectorAll('.daysep'),i,top=[];
+  for(i=0;i<ps.length;i++)top.push(ps[i].getBoundingClientRect().top);
+  for(i=0;i<ps.length;i++)
+    ps[i].classList.toggle('under',i+1<ps.length&&Math.abs(top[i+1]-top[i])<2);
+}
+var daysScroll=0;
+el('msgs').addEventListener('scroll',function(){
+  if(!daysScroll)daysScroll=requestAnimationFrame(function(){daysScroll=0;daysStuck();});},{passive:true});
 function clearChat(){
   toggleMenu();
   clearedBefore=Math.floor(Date.now()/1000);

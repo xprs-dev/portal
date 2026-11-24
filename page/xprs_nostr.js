@@ -8,6 +8,25 @@
 
 function nostrAvailable(){return !!(window.nostr&&window.nostr.getPublicKey);}
 
+/* One request at a time to the extension, [fn](done) each. nos2x shows a popup
+ * per request and queues the rest; a popup closing can deny the next one
+ * before it is seen, and the login (identity, then session) asks twice at
+ * once. A request that took long had a person answer a popup: the next waits
+ * a moment, until that window is gone. */
+var nostrBusy=false,nostrWaiting=[];
+function nostrQueue(fn){
+  nostrWaiting.push(fn);
+  if(!nostrBusy)nostrNext(0);}
+function nostrNext(gap){
+  var fn=nostrWaiting.shift();
+  if(!fn){nostrBusy=false;return;}
+  nostrBusy=true;
+  setTimeout(function(){
+    var t0=Date.now(),over=false;
+    var done=function(){if(over)return;over=true;nostrNext(Date.now()-t0>400?700:0);};
+    try{fn(done);}catch(e){done();}
+  },gap);}
+
 /* "YYYY-MM-DD_hh:mm:ss" (UTC) -> epoch seconds, or 0. */
 function tsEpoch(ts){
   var m=/^(\d{4})-(\d\d)-(\d\d)_(\d\d):(\d\d):(\d\d)$/.exec(ts||'');
@@ -37,11 +56,14 @@ function nostrSignWire(canonical,pubHex,cb){
     var sig=b85enc(unhexBytes(signed.sig));
     var i=canonical.indexOf(' m:');
     cb(i>=0?canonical.slice(0,i)+' sig:'+sig+canonical.slice(i):canonical+' sig:'+sig);};
-  try{
-    var r=window.nostr.signEvent(ev.event);
-    if(r&&r.then)r.then(done,function(e){cb(null,(e&&e.message)||'the signer refused');});
-    else done(r);
-  }catch(e){cb(null,(e&&e.message)||'the signer refused');}
+  nostrQueue(function(next){
+    var no=function(e){next();cb(null,(e&&e.message)||'the signer refused');};
+    try{
+      var r=window.nostr.signEvent(ev.event);
+      if(r&&r.then)r.then(function(v){next();done(v);},no);
+      else{next();done(r);}
+    }catch(e){no(e);}
+  });
 }
 function unhexBytes(h){var b=new Uint8Array(h.length/2);
   for(var i=0;i<b.length;i++)b[i]=parseInt(h.substr(2*i,2),16);return b;}
@@ -70,15 +92,19 @@ function xToNip04(x){
 function nostrSeal(peerHex,text,cb){
   var n=window.nostr&&window.nostr.nip04;
   if(!n||!n.encrypt){cb(null);return;}
-  try{
-    var r=n.encrypt(peerHex,text),f=function(c){cb(nip04ToX(c));};
-    if(r&&r.then)r.then(f,function(){cb(null);});else f(r);
-  }catch(e){cb(null);}}
+  nostrQueue(function(next){
+    try{
+      var r=n.encrypt(peerHex,text),f=function(c){next();cb(nip04ToX(c));};
+      if(r&&r.then)r.then(f,function(){next();cb(null);});else f(r);
+    }catch(e){next();cb(null);}
+  });}
 /* Open an `x:` value from [peerHex] with the extension: cb(text) or cb(null). */
 function nostrOpen(peerHex,x,cb){
   var n=window.nostr&&window.nostr.nip04,c=xToNip04(x);
   if(!n||!n.decrypt||!c){cb(null);return;}
-  try{
-    var r=n.decrypt(peerHex,c),f=function(t){cb(typeof t==='string'?t:null);};
-    if(r&&r.then)r.then(f,function(){cb(null);});else f(r);
-  }catch(e){cb(null);}}
+  nostrQueue(function(next){
+    try{
+      var r=n.decrypt(peerHex,c),f=function(t){next();cb(typeof t==='string'?t:null);};
+      if(r&&r.then)r.then(f,function(){next();cb(null);});else f(r);
+    }catch(e){next();cb(null);}
+  });}

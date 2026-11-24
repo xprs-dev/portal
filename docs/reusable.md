@@ -153,3 +153,13 @@ through the page itself (headless Chromium), signing with a given signer
   "1276 (+24)" with the addition in green (`.gcnt b`, `.gnew`). The "seen"
   number lives in the browser (`xprs_gseen`); the station keeps nothing per
   visitor. Reuse for any list of rooms that should show unread counts.
+- `nostrQueue(fn)` (`page/xprs_nostr.js`): every call to a NOSTR extension
+  (`signEvent`, `nip04`) goes through it, one at a time; `fn(done)` calls
+  `done()` when the extension answered. nos2x shows a popup per request and
+  can deny a queued one when the previous popup closes. Any new `window.nostr`
+  call belongs in it.
+- `noticed{}` + `openedAt` (beep): a message beeps only the first time this
+  page sees it and only if sent after the page opened; rooms drawn again on
+  switching stay quiet. Reuse for any "new since you came" signal.
+- `daysStuck()`: among sticky separators that share one scroll box, only the
+  newest stuck one shows. Reuse for any other sticky headers in a list.
