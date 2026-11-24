@@ -2381,6 +2381,61 @@ function tick(){
 // Stats, Station and Settings live behind the menu, not in the tab row.
 function openView(t){toggleMenu();showTab(t);}
 
+// ---- Back goes back a section ------------------------------------------------
+//
+// A phone's back gesture and the browser's Back left the site from anywhere,
+// because the page had no history of its own. Each place a tap leads to (a
+// tab, a room, a gallery folder or event, a forum topic) is one history entry,
+// the address unchanged; an open menu, side list or picture viewer is one too,
+// so Back closes it first. Back comes to the place before; from the first one
+// it leaves the site. The page's own back arrows step the history back too.
+var navStack=[],navAt=0,navBusy=false;
+function navHere(){
+  var m=el('menu'),sd=el('side');
+  return {tab:tab,room:curRoom,
+    galCat:GAL_KINDS[curRoom]?galCat:null,
+    galEv:GAL_KINDS[curRoom]&&galEvent?{id:galEvent.id,title:galEvent.title}:null,
+    topic:curRoom.slice(0,2)==='f:'&&forumTopic?{id:forumTopic.id,title:forumTopic.title}:null,
+    menu:!!m&&/\bopen\b/.test(m.className),side:!!sd&&/\bopen\b/.test(sd.className),
+    box:!!el('galbox')};}
+function navKey(s){return s?JSON.stringify([s.tab,s.room,s.galCat,s.galEv,s.topic,s.menu,s.side,s.box]):'';}
+function navOver(s){return !!s&&(s.menu||s.side||s.box);}
+function navCheck(){
+  if(navBusy||curRoom==='onew')return;
+  var now=navHere(),cur=navStack[navAt],k=navKey(now);
+  if(k===navKey(cur))return;
+  if(navAt>0&&k===navKey(navStack[navAt-1])){navBusy=true;history.back();return;}
+  if(navOver(cur)){navStack[navAt]=now;history.replaceState({nav:navAt},'');return;}
+  navStack.length=++navAt;navStack[navAt]=now;
+  history.pushState({nav:navAt},'');}
+function navRestore(s){
+  navBusy=true;
+  try{
+    if(!s.menu)closeMenu();
+    if(!s.side)closeSide();
+    if(!s.box)galClose();
+    if(s.tab!==tab)showTab(s.tab);
+    if(s.room!==curRoom)switchRoom(s.room);
+    if(GAL_KINDS[s.room]&&(s.galCat!==galCat||navKey({galEv:s.galEv})!==navKey({galEv:galEvent}))){
+      galCat=s.galCat;galEvent=s.galEv;galRows=null;loadGallery(true);}
+    if(s.room.slice(0,2)==='f:'&&JSON.stringify(s.topic)!==JSON.stringify(forumTopic&&{id:forumTopic.id,title:forumTopic.title})){
+      if(s.topic)openTopic(s.topic.id,s.topic.title);else closeTopic();}
+  }catch(e){}
+  navBusy=false;}
+function navStart(){
+  navStack=[navHere()];navAt=0;history.replaceState({nav:0},'');
+  ['click','keyup','touchend','hashchange'].forEach(function(t){
+    (t==='hashchange'?window:document).addEventListener(t,function(){setTimeout(navCheck,0);},true);});
+  window.addEventListener('popstate',function(e){
+    var n=e.state&&typeof e.state.nav==='number'?e.state.nav:null;
+    navBusy=false;
+    if(n===null)return;
+    navAt=n;
+    var s=navStack[n];
+    if(!s){navStack[n]=navHere();return;}   /* from before a reload: stay */
+    if(navKey(s)!==navKey(navHere()))navRestore(s);});
+}
+
 // Traffic: every packet the station filed, not only the ones chat shows.
 //
 // One entry per packet. The archive files a copy for every bearer a packet
@@ -4714,6 +4769,7 @@ function adminRelease(){
   var asked=groupFromAddress();
   if(asked){followGroup(asked,true);curRoom='o:'+asked;}
   switchRoom(curRoom);
+  navStart();
   load();
   tabTimer=setInterval(tick,TAB_MS.chat);
   getJSON('/api/services',applyServices);

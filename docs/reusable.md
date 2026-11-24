@@ -163,3 +163,8 @@ through the page itself (headless Chromium), signing with a given signer
   switching stay quiet. Reuse for any "new since you came" signal.
 - `daysStuck()`: among sticky separators that share one scroll box, only the
   newest stuck one shows. Reuse for any other sticky headers in a list.
+- `navHere()` / `navCheck()` / `navRestore(s)` (Back goes back a section):
+  every place a tap leads to is one history entry (address unchanged), open
+  overlays (menu, side list, picture viewer) included so Back closes them
+  first. A new place or overlay only needs its state added to `navHere()` and
+  its way back to `navRestore()`; taps are picked up on their own.
