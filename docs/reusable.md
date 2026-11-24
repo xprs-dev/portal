@@ -168,3 +168,15 @@ through the page itself (headless Chromium), signing with a given signer
   overlays (menu, side list, picture viewer) included so Back closes them
   first. A new place or overlay only needs its state added to `navHere()` and
   its way back to `navRestore()`; taps are picked up on their own.
+- **`look(what)` / `lookDone()` / `lookState(room)` / `roomAnswered(room)`**
+  with the `.messages[data-look]` and `[data-none]` rules: what a section
+  says while it has nothing to show. `look('posts')` writes "Looking for
+  posts…" until the answer is drawn (`lookDone()`); a conversation says "No
+  messages here yet" only once its own history came (`roomAnswered()`).
+  Anything new that fills `#msgs` from a request calls `look()` when it
+  clears the column and `lookDone()` where it draws, and never prints an
+  empty note before the station answered. `svcKnown`, `roomsLoaded`,
+  `alertsLoaded` and `blogLoaded` say which first answers have come.
+- **Held answers in `test/look_smoke.py`**: `getJSON` wrapped in the page so
+  every answer waits for `release()`. A slow link made exact, for testing
+  what the page shows between asking and being answered.
