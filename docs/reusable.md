@@ -1,5 +1,14 @@
 # Reusable pieces in the web chat
 
+- **`stGet(k)` / `stSet(k, v)`**: the page's storage, `localStorage` first;
+  a cookie only where `localStorage` cannot keep the value (captive WebViews),
+  and a leftover cookie dropped, because a cookie goes to the server with every
+  request and `xprs_nsec` is the secret key. Store anything the page keeps
+  through them, never `document.cookie` directly.
+- **`groupFromAddress()` / `dmFromAddress()`**: what the address asks to open,
+  `#g=<group>` or `#dm=<callsign>`. A link that should land on one
+  conversation (the xprs.dev map's Message, a shared link) uses these forms.
+
 - **`wireId(w)`** (`page/chat_page.html`): the XPRS.md 5 identifier in the
   browser, `via:` and `sig:` left out. Use it wherever two rows may be copies of
   one packet: chat bubbles and the Traffic merge both key on it.
