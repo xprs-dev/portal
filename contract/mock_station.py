@@ -184,6 +184,16 @@ def place_aired():
     lat, lon = (float(x) for x in SETTINGS['pos_at'].split(','))
     return {'pos': cut(lat) + ',' + cut(lon), 'acc': m}
 LOCAL = not os.environ.get('MOCK_REMOTE')
+# MOCK_LOCATE: a board, which can ask its owner's phone in reach where it is
+# (XPRS.md 8, q:pos); the phone "answers" three seconds later.
+LOCATE = bool(os.environ.get('MOCK_LOCATE'))
+ASKED = {'at': 0}
+
+
+def place_answered():
+    if ASKED['at'] and time.time() - ASKED['at'] >= 3:
+        ASKED['at'] = 0
+        SETTINGS['pos_at'] = '38.70771,-9.13654'
 
 
 # XPRS.md 10.10, the shapes only (the rules are WebChatApi's): callsign ->
@@ -201,7 +211,8 @@ def admin_state(token):
     if st['role'] == 'invited':
         st['offer'] = OFFER
     if you:
-        st['settings'] = dict(SETTINGS)
+        place_answered()
+        st['settings'] = dict(SETTINGS, pos_locate=LOCATE, pos_asking=ASKED['at'] > 0)
     if you or st['role'] == 'mod':
         st['moderators'] = sorted(c for c, r in ROLES.items() if r == 'mod')
         st['invited'] = sorted(c for c, r in ROLES.items() if r == 'invited')
@@ -502,6 +513,12 @@ class H(BaseHTTPRequestHandler):
                     ROLES.pop(who, None) if act == 'dismiss' else None
                     if act == 'lift' and who in AWAY:
                         AWAY.remove(who)
+            elif act == 'locate':
+                if call != ADMIN['call']:
+                    return self._send(403, {'ok': False, 'error': 'not the administrator'})
+                if not LOCATE:
+                    return self._send(409, {'ok': False, 'error': 'this station cannot ask for its location'})
+                ASKED['at'] = time.time()
             elif act in ('set', 'release'):
                 if call != ADMIN['call']:
                     return self._send(403, {'ok': False, 'error': 'not the administrator'})
@@ -518,6 +535,9 @@ class H(BaseHTTPRequestHandler):
                             if not isinstance(v, bool):
                                 return self._send(400, {'ok': False, 'error': 'pos_share must be true or false'})
                             SETTINGS['pos_chosen'] = True
+                            # Yes with no point: a board asks its owner's phone.
+                            if v and LOCATE and not SETTINGS['pos_at'] and not (b.get('settings') or {}).get('pos_at'):
+                                ASKED['at'] = time.time()
                         if k == 'pos_at' and not (v == '' or (isinstance(v, str) and re.match(
                                 r'^-?\d{1,3}(\.\d{1,5})?,-?\d{1,3}(\.\d{1,5})?$', v)
                                 and abs(float(v.split(',')[0])) <= 90 and abs(float(v.split(',')[1])) <= 180)):

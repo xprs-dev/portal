@@ -36,6 +36,7 @@ async def run(port, remote, wifi=False):
     env = dict(os.environ)
     if wifi:
         env['MOCK_WIFI'] = '1'
+        env['MOCK_LOCATE'] = '1'   # a board: it can ask its owner's phone (q:pos)
     if remote:
         env['MOCK_REMOTE'] = '1'
     mock = subprocess.Popen([sys.executable, os.path.join(ROOT, 'contract', 'mock_station.py'),
@@ -179,6 +180,18 @@ async def run(port, remote, wifi=False):
             await asyncio.sleep(2)
             s2 = admin_state()
             check(s2.get('pos_chosen') is True and s2.get('pos_share') is False, 'Not now is an answer: %s' % s2)
+            has_btn = await ev("!!document.querySelector('[onclick=\"posLocate()\"]')")
+            check(has_btn == bool(wifi), 'Use my phone\'s location only where the station can ask (%s)' % has_btn)
+            if wifi:
+                await click('[onclick="posLocate()"]')
+                await asyncio.sleep(1)
+                check(await ev("document.getElementById('ad-pos').textContent.indexOf('Asking your phone')>=0"),
+                      'the card says it is asking the phone')
+                await asyncio.sleep(9)
+                check(admin_state().get('pos_at') == '38.70771,-9.13654' and
+                      await ev("el('ps-lat').value") == '38.70771',
+                      'the phone\'s answer becomes the point, drawn when it comes')
+                check(place() is None, 'and nothing is aired: sharing stays off')
             await ev("(el('ps-lat').value='38.72231',el('ps-lon').value='-9.13934',el('ps-r').value='100000',1)")
             await click('[onclick="posSave()"]')
             await asyncio.sleep(2)
