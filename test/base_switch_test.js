@@ -55,9 +55,9 @@ const tick = () => new Promise(r => setTimeout(r, 0));
   // xprs.dev.
   let asked = null, went = 0;
   w = world({ ask() {}, use(c) { asked = c; return Promise.resolve(() => { went++; }); } });
-  check(/Use this archiver/.test(w.api.mapUse(archiver('X1BBB'))), 'an archiver offers "Use this archiver"');
+  check(/>Visit</.test(w.api.mapUse(archiver('X1BBB'))), 'an archiver offers "Visit"');
   check(w.api.mapUse({ call: 'X1CCC', serve: ['relay'] }) === '', 'a station that keeps nothing does not');
-  check(/Browsing from here/.test(w.api.mapUse(archiver('X1AAA'))), 'the one in use says so, whatever its SSID');
+  check(w.api.mapUse(archiver('X1AAA')) === '', 'the one in use offers nothing, whatever its SSID');
   check(w.api.useBtn('X1AAA') === '' && /baseSwitch\('X1BBB'\)/.test(w.api.useBtn('X1BBB')), 'the archivers list: Use on the others only');
 
   w.api.baseSwitch('X1BBB');

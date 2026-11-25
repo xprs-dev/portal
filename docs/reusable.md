@@ -220,7 +220,7 @@ through the page itself (headless Chromium), signing with a given signer
   station's place uses these, never a rounding of its own.
 - **`canSwitch()` / `useBtn(c)` / `mapUse(s)` / `baseSwitch(c)`**: another
   archiver as the page's base, where the shell can make one
-  (`XPRS_REMOTE.use`, xprs.dev only): `useBtn` is the Use button for any
+  (`XPRS_REMOTE.use`, xprs.dev only): `useBtn` is the Visit button for any
   list of archivers, `mapUse` the popup's, `baseSwitch` keeps the map's view
   (`mapViewKept()` reads it back once, in `mapInit`) and opens the portal on
   it. `test/base_switch_test.js`; the page half end to end in
@@ -235,3 +235,6 @@ through the page itself (headless Chromium), signing with a given signer
   `test/profile_test.js`; a new browser end to end in
   `test/accounts_smoke.py` (`/__mailbox` on the mock seeds what a station
   learned from its peers).
+- **`mapTagOne(t)` / `mapTagName(t)`**: what a station announces
+  (`serve:archive`...), named for ONE station (a popup: "Archiver") or for
+  a group of them (a filter chip: "Archivers").

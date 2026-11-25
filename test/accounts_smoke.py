@@ -14,8 +14,8 @@ real one). Checks:
     too, and both receive the signed t:mailbox hold:X3MOCK,X3ARCB;
   - mail kept by B is shown, and the receipt goes to B as well;
   - the Map view draws the stations and opens a private message from one;
-  - an archiver on the map offers "Use this archiver" (the one in use says it
-    is browsed from), so do the archivers in Accounts; the button asks the
+  - an archiver on the map offers "Visit" (not the one in use), so do the
+    archivers in Accounts; the button asks the
     shell (XPRS_REMOTE.use) and the page opened next keeps the map's view.
 """
 import json
@@ -159,8 +159,9 @@ try:
     time.sleep(.5)
     E("mapAskedAt=0;openView('map')")
     c.wait("!!mapByCall('X3ARCB')&&!!mapMarks['X3ARCB']", 30)
-    check('Use this archiver' in E("mapPop(mapByCall('X3ARCB'))"), 'an archiver on the map offers "Use this archiver"')
-    check('Browsing from here' in E("mapPop(mapByCall('X3MOCK'))"), 'the archiver in use says it is browsed from')
+    check('>Visit<' in E("mapPop(mapByCall('X3ARCB'))"), 'an archiver on the map offers "Visit"')
+    check('>Archiver<' in E("mapPop(mapByCall('X3ARCB'))"), 'and is called an Archiver, one of them')
+    check('>Visit<' not in E("mapPop(mapByCall('X3MOCK'))"), 'the archiver in use offers no visit')
     check(E("mapMarks['X3MOCK'].options.color") == '#FFC107', 'and its marker stands out')
     E("openView('accounts')"); time.sleep(.5)
     check(E("!!document.querySelector('#v-accounts button[onclick*=\"baseSwitch(\\'X3ARCB\"]')"), 'Accounts: Use beside the other archiver')
