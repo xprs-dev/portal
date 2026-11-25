@@ -67,6 +67,11 @@ async def run(port, remote, wifi=False):
                     if m.get('id') == n:
                         return m.get('result', {})
 
+            # The page as it is where the map cannot load: this checks the
+            # menu and views of that layout (cdp.py Cdp.classic()).
+            await send('Network.enable')
+            await send('Network.setBlockedURLs', {'urls': ['*leaflet*']})
+
             async def ev(js):
                 r = await send('Runtime.evaluate', {'expression': js, 'awaitPromise': True,
                                                    'returnByValue': True})

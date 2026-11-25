@@ -5,6 +5,22 @@
   and a leftover cookie dropped, because a cookie goes to the server with every
   request and `xprs_nsec` is the secret key. Store anything the page keeps
   through them, never `document.cookie` directly.
+- **Accounts (`accList` / `accEntry` / `accSet` / `accHold`)**: several
+  identities kept in this browser (`xprs_accounts`), the one in use still in
+  `xprs_nsec` / `xprs_ext`; each carries its archivers (`hold`). Anything kept
+  per person (not per browser) goes on the account entry through `accSet`.
+- **`declareHold(list)`**: the signed `t:mailbox hold:<list> until:+30d`
+  (XPRS.md 9.12), handed to this station and to each archiver in the list.
+- **Other stations (`remote()`, `remoteSession(c)`, `remotePost(c, wire)`,
+  `remoteEach(fn)`)**: where the page can reach more than its own station
+  (xprs.dev's `window.XPRS_REMOTE`), a session on another station, a wire
+  posted there with our identity first, and a loop over this account's
+  archivers. Anything that must reach every archiver (mail, receipts) uses them.
+- **`mapPos(p)` / `mapStations(rows)`**: `pos:` as XPRS.md 15.1 reads it
+  (redaction bars: the middle of the square, with `box` and `range`), and
+  history rows folded into one entry per station (place, key, nick,
+  `archive` from `t:service serve:`). The Map view draws them; anything that
+  lists stations reuses them.
 - **`groupFromAddress()` / `dmFromAddress()`**: what the address asks to open,
   `#g=<group>` or `#dm=<callsign>`. A link that should land on one
   conversation (the xprs.dev map's Message, a shared link) uses these forms.

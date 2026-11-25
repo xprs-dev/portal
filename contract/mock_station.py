@@ -49,7 +49,7 @@ ROWS = [{
     'to': '', 'type': 'message', 'sig': 'verified', 'own': False,
     'wire': 't:message f:X1ARKL ts:2026-10-15_09:00:00 scope:local m:hello from the mock',
 }]
-SERVICES = {'ok': True, 'station': 'X3MOCK', 'features': {}, 'serve': [],
+SERVICES = {'ok': True, 'station': os.environ.get('MOCK_CALL', 'X3MOCK'), 'features': {}, 'serve': [],
             'page': {'tabs': ['chat', 'traffic', 'alerts'], 'config': False, 'app': '/app',
                      'session': True, 'mailbox': True, 'admin': True, 'moderation': True,
                      'rooms': True, 'alerts': 'moderators'},
@@ -352,6 +352,10 @@ class H(BaseHTTPRequestHandler):
             if call:
                 rows = [r for r in rows if r['from'] == call]
             room = (q.get('room') or [''])[0]
+            # The Local room is the station's own network's (WebChatApi):
+            # a visitor from the internet is told so, with no rows.
+            if room == 'local' and not LOCAL and SETTINGS['local_private']:
+                return self._send(200, {'ok': True, 'count': 0, 'held': 0, 'rows': [], 'private': True})
             if room in ROOMS:
                 tok = (q.get('session') or [''])[0]
                 who = SESSIONS.get(tok)

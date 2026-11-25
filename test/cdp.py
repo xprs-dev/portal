@@ -78,6 +78,12 @@ class Cdp:
             time.sleep(0.1)
         time.sleep(1.0)
 
+    def classic(self):
+        """The page as it is where the map cannot load (a board's hotspot with
+        no internet): Leaflet blocked, so no map layout. Call after attach()."""
+        self.send('Network.enable')
+        self.send('Network.setBlockedURLs', {'urls': ['*leaflet*']})
+
     def wait(self, expr, seconds=8):
         """Poll [expr] until it is truthy; its value, or None when it never was."""
         for _ in range(int(seconds * 10)):

@@ -42,6 +42,7 @@ time.sleep(1)
 c = Cdp(BROWSER, PROF)
 try:
     c.attach()
+    c.classic()
     c.load('http://127.0.0.1:%d/' % PORT)
     bar = "getComputedStyle(document.querySelector('.input-area')).display"
     fab = "getComputedStyle(document.getElementById('fab')).display"
