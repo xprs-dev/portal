@@ -218,3 +218,10 @@ through the page itself (headless Chromium), signing with a given signer
   it back to the middle of its square. `test/place_test.js` holds both to
   the core's worked values. Anything in the page that shows or previews a
   station's place uses these, never a rounding of its own.
+- **`canSwitch()` / `useBtn(c)` / `mapUse(s)` / `baseSwitch(c)`**: another
+  archiver as the page's base, where the shell can make one
+  (`XPRS_REMOTE.use`, xprs.dev only): `useBtn` is the Use button for any
+  list of archivers, `mapUse` the popup's, `baseSwitch` keeps the map's view
+  (`mapViewKept()` reads it back once, in `mapInit`) and opens the portal on
+  it. `test/base_switch_test.js`; the page half end to end in
+  `test/accounts_smoke.py`.

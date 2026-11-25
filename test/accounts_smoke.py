@@ -13,7 +13,10 @@ real one). Checks:
   - archivers: A offers and is declared, then B is added because it offers
     too, and both receive the signed t:mailbox hold:X3MOCK,X3ARCB;
   - mail kept by B is shown, and the receipt goes to B as well;
-  - the Map view draws the stations and opens a private message from one.
+  - the Map view draws the stations and opens a private message from one;
+  - an archiver on the map offers "Use this archiver" (the one in use says it
+    is browsed from), so do the archivers in Accounts; the button asks the
+    shell (XPRS_REMOTE.use) and the page opened next keeps the map's view.
 """
 import json
 import os
@@ -58,6 +61,7 @@ def post(port, path, obj):
 
 REMOTE = """window.XPRS_REMOTE={station:'X3MOCK',home:true,
  archivers:function(){return [{call:'X3ARCB',at:Math.floor(Date.now()/1000)-60}];},
+ use:function(c){window.__used=c;return Promise.resolve(function(){sessionStorage.setItem('__went',c);});},
  ask:function(c,m,p,q,b){
    var u=(c==='X3ARCB'?'http://127.0.0.1:%d':'')+p+'?'+new URLSearchParams(q||{});
    return fetch(u,{method:m,body:b==null?undefined:b}).then(function(r){return r.text().then(function(t){
@@ -119,6 +123,32 @@ try:
     check(E("!!document.querySelector('#maplist [onclick*=X1MAPA]')"), 'a station with a key has Message')
     E("mapWrite('X1MAPA')"); time.sleep(.5)
     check(E("curRoom") == 'dm:X1MAPA' and E("tab") == 'chat', 'Message opens the private conversation')
+
+    # Another archiver as the base: from the map, and from Accounts.
+    E("""(function(){var now=Math.floor(Date.now()/1000);
+      [{ts:now-20,type:'service',from:'X3ARCB',to:'',wire:'t:service f:X3ARCB ts:x serve:archive,relay pos:48.13,11.57 acc:1000'},
+       {ts:now-25,type:'service',from:'X3MOCK',to:'',wire:'t:service f:X3MOCK ts:x serve:archive pos:38.72,-9.14 acc:1000'}]
+      .forEach(function(r){fetch('/__row',{method:'POST',body:JSON.stringify(r)});});})()""")
+    time.sleep(.5)
+    E("mapAskedAt=0;openView('map')")
+    c.wait("!!mapByCall('X3ARCB')&&!!mapMarks['X3ARCB']", 30)
+    check('Use this archiver' in E("mapPop(mapByCall('X3ARCB'))"), 'an archiver on the map offers "Use this archiver"')
+    check('Browsing from here' in E("mapPop(mapByCall('X3MOCK'))"), 'the archiver in use says it is browsed from')
+    check(E("mapMarks['X3MOCK'].options.color") == '#FFC107', 'and its marker stands out')
+    E("openView('accounts')"); time.sleep(.5)
+    check(E("!!document.querySelector('#v-accounts button[onclick*=\"baseSwitch(\\'X3ARCB\"]')"), 'Accounts: Use beside the other archiver')
+    check(not E("!!document.querySelector('#v-accounts button[onclick*=\"baseSwitch(\\'X3MOCK\"]')"), 'never beside the one in use')
+    E("openView('map')"); time.sleep(.5)
+    E("mapObj.setView([48.1,11.5],8);mapFocus('X3ARCB')"); time.sleep(1)
+    E("document.querySelector('.leaflet-popup button.mapall').click()")
+    c.wait("sessionStorage.getItem('__went')==='X3ARCB'", 10)
+    check(E("window.__used") == 'X3ARCB', 'the button asks the shell to use X3ARCB')
+    kept = E("sessionStorage.getItem('xprs.in.view')") or ''
+    check('"z":' in kept, 'the map view is kept for the page opened next: ' + kept)
+    E("location.reload()")
+    c.wait("typeof mapObj!=='undefined'&&!!mapObj", 30)
+    check(E("mapObj.getZoom()") >= 8 and abs(E("mapObj.getCenter().lat") - 48.13) < 1,
+          'the page opened again shows the map where it was')
 finally:
     c.close()
     a.terminate()
