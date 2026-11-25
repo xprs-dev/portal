@@ -162,7 +162,25 @@ try:
     check('>Visit<' in E("mapPop(mapByCall('X3ARCB'))"), 'an archiver on the map offers "Visit"')
     check('>Archiver<' in E("mapPop(mapByCall('X3ARCB'))"), 'and is called an Archiver, one of them')
     check('>Visit<' not in E("mapPop(mapByCall('X3MOCK'))"), 'the archiver in use offers no visit')
-    check(E("mapMarks['X3MOCK'].options.color") == '#FFC107', 'and its marker stands out')
+    check('maparch base' in (E("mapMarks['X3MOCK']._icon.className") or ''), 'and its marker stands out')
+    check(E("mapMarks['X3ARCB'].options.pane") == 'mapArch', 'archivers are drawn on their own layer, above the rest')
+
+    # Near on the screen is one bubble; close in they come apart.
+    E("mapObj.setView([49.45,8.6],4),1"); time.sleep(1.2)
+    check(E("mapMarks['X1MAPA']===mapMarks['X1MAPB']"), 'zoomed out: two stations near each other are one bubble')
+    check(E("mapMarks['X3ARCB']!==mapMarks['X1MAPA']"), 'and an archiver is never folded into a bubble of people')
+    E("mapObj.setView([49.45,8.6],10),1"); time.sleep(1.2)
+    check(E("mapMarks['X1MAPA']!==mapMarks['X1MAPB']"), 'zoomed in: they come apart')
+
+    # The filter over the map.
+    check(E("document.querySelectorAll('#mapshow button').length") == 4, 'the filter offers All, Archivers, People, Other')
+    E("mapShowSet('archive')"); time.sleep(.5)
+    check(E("!!mapMarks['X3ARCB']&&!mapMarks['X1MAPA']"), 'Archivers: only archivers on the map')
+    check('X1MAPA' not in E("el('maplist').innerText") and 'X3ARCB' in E("el('maplist').innerText"), 'and in the Stations list')
+    E("mapShowSet('people')"); time.sleep(.5)
+    check(E("!mapMarks['X3ARCB']&&!!mapMarks['X1MAPA']"), 'People: no archivers')
+    check(E("localStorage.getItem('xprs.in.mapshow')") == 'people', 'the choice is remembered')
+    E("mapShowSet('all')"); time.sleep(.5)
     E("openView('accounts')"); time.sleep(.5)
     check(E("!!document.querySelector('#v-accounts button[onclick*=\"baseSwitch(\\'X3ARCB\"]')"), 'Accounts: Use beside the other archiver')
     check(not E("!!document.querySelector('#v-accounts button[onclick*=\"baseSwitch(\\'X3MOCK\"]')"), 'never beside the one in use')

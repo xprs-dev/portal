@@ -238,3 +238,9 @@ through the page itself (headless Chromium), signing with a given signer
 - **`mapTagOne(t)` / `mapTagName(t)`**: what a station announces
   (`serve:archive`...), named for ONE station (a popup: "Archiver") or for
   a group of them (a filter chip: "Archivers").
+- **`mapCluster(pts, project, near)`**: points into groups whose members lie
+  within `near` screen pixels at the zoom drawn, one pass over a grid; any
+  map that draws many markers merges them with it (`test/map_cluster_test.js`).
+  **`mapKind(s)` / `mapShows(s)`**: archiver (`serve:archive`, any machine),
+  person (`X1`) or other station, and whether the filter over the map shows
+  it; the map and the Stations list both read it.
