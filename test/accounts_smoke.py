@@ -86,7 +86,13 @@ try:
     hold = E("accHold().join()")
     check(hold == 'X3MOCK,X3ARCB', 'A offered, then B offered too: archivers ' + hold)
     mb = lambda port: [w for w in sent(port) if w.startswith('t:mailbox ') and ' hold:X3MOCK,X3ARCB ' in w]
-    check(len(mb(A)) >= 1 and len(mb(B)) >= 1, 'the signed t:mailbox reached both archivers')
+    for _ in range(20):
+        if mb(A) and mb(B):
+            break
+        time.sleep(.5)
+    check(len(mb(A)) >= 1 and len(mb(B)) >= 1, 'the signed t:mailbox reached both archivers: %d on A, %d on B' % (len(mb(A)), len(mb(B))))
+    if not (mb(A) and mb(B)):
+        print('    A got', [w[:70] for w in sent(A) if w.startswith('t:mailbox')], 'B got', [w[:70] for w in sent(B) if w.startswith('t:mailbox')])
     check(any(w.startswith('t:identity f:' + first) for w in sent(B)), 'B was told the identity first')
     check(E("JSON.parse(localStorage.getItem('xprs_hold')).join()") == hold, 'xprs_hold says where the shell opens /in/ next time')
 
@@ -109,6 +115,27 @@ try:
     check(E("accHold().join()") == hold, 'with its own archivers')
     E("accDrop('%s')" % second); time.sleep(.3)
     check(E("accList().length") == 1, 'the second is removed')
+
+    # A person whose archivers were chosen on another device: only B knows
+    # (12.9.5). A, which does not, offers itself; the page asks the other
+    # archivers first, takes the person's own list and declares nothing.
+    third = E("(function(){var k=randKey();window.__k3=k;return callsignFromNpub(npubEncode(pubkeyX(k)));})()")
+    post(B, '/__mailbox', {'call': third, 'hold': ['X3ARCB', 'X3FAR1']})
+    E("stSet('xprs_ext','0');useKey(window.__k3);accFresh()")
+    c.wait("mycall==='%s'&&accHold().join()==='X3ARCB,X3FAR1'" % third, 40)
+    check(E("accHold().join()") == 'X3ARCB,X3FAR1', 'a new browser finds the person\'s archivers on another archiver: ' + E("accHold().join()"))
+    check(E("JSON.parse(localStorage.getItem('xprs_hold')).join()") == 'X3ARCB,X3FAR1', 'and the shell opens /in/ on them next time')
+    time.sleep(2)
+    check(not [w for w in sent(A) + sent(B) if w.startswith('t:mailbox f:' + third)],
+          'no mailbox is declared over the person\'s own')
+    # Known to the station in use: taken from the session at once.
+    fourth = E("(function(){var k=randKey();window.__k4=k;return callsignFromNpub(npubEncode(pubkeyX(k)));})()")
+    post(A, '/__mailbox', {'call': fourth, 'hold': ['X3FAR2']})
+    E("useKey(window.__k4);accFresh()")
+    c.wait("mycall==='%s'&&accHold().join()==='X3FAR2'" % fourth, 40)
+    check(E("accHold().join()") == 'X3FAR2', 'the station in use names the person\'s archivers: taken as they are')
+    E("accUse('%s')" % first); time.sleep(1)
+    check(E("mycall") == first and E("accHold().join()") == hold, 'the first identity keeps its own archivers')
 
     # The map: an identity with a place and a key, and one hiding its digits.
     E("""(function(){var k=new Uint8Array(32);k[31]=9;var n=npubEncode(pubkeyX(k)),now=Math.floor(Date.now()/1000);

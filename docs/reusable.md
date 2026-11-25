@@ -225,3 +225,13 @@ through the page itself (headless Chromium), signing with a given signer
   (`mapViewKept()` reads it back once, in `mapInit`) and opens the portal on
   it. `test/base_switch_test.js`; the page half end to end in
   `test/accounts_smoke.py`.
+- **`profileArchivers(j, done)` / `holdersOf(j)` / `profileAround(done)`**:
+  the person's archivers as the network knows them (their signed
+  `t:mailbox hold:`, XPRS.md 9.12, passed between archivers 12.9.5), like a
+  NOSTR relay list: a session reply's `holders` is the account's list, this
+  browser's copy only a cache; where the station knows none, the other
+  archivers in reach are asked before anything is declared. `done(list,
+  adopted)`: an adopted list is never re-signed by the page.
+  `test/profile_test.js`; a new browser end to end in
+  `test/accounts_smoke.py` (`/__mailbox` on the mock seeds what a station
+  learned from its peers).

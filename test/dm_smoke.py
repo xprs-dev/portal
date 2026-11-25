@@ -63,7 +63,12 @@ async def main():
                     if m.get('id') == n:
                         return m['result'].get('result', {}).get('value')
 
-            await asyncio.sleep(4)
+            # The session waits for the extension check (3 s), then signs: on
+            # a busy machine that is more than a fixed few seconds.
+            for _ in range(60):
+                if await ev("typeof sess!=='undefined'&&sess!==''"):
+                    break
+                await asyncio.sleep(0.5)
             check(await ev("sess!==''"), 'the page got a session from the station')
             peer = "n2b(7n,32)"
             await ev(f"""(async()=>{{
@@ -95,10 +100,16 @@ async def main():
             check(await ev("document.getElementById('msgs').innerHTML.indexOf('>sealed<')>=0"),
                   'and marked sealed')
             await ev("(document.getElementById('txt').value='reply sealed',sendMsg(),1)")
-            await asyncio.sleep(2)
-            sent = json.load(urllib.request.urlopen('http://127.0.0.1:%d/__sent' % PORT))
-            dm = [w for w in sent if ' d:X1PEER' in w]
+            for _ in range(30):
+                sent = json.load(urllib.request.urlopen('http://127.0.0.1:%d/__sent' % PORT))
+                dm = [w for w in sent if w.startswith('t:message ') and ' d:X1PEER' in w]  # receipts go d: too (9.7.1)
+                if dm:
+                    break
+                await asyncio.sleep(0.5)
+            if not dm:
+                print('    sent:', [w[:60] for w in sent][-5:], 'room:', await ev("curRoom"))
             check(len(dm) == 1 and ' x:' in dm[0] and ' m:' not in dm[0], 'the reply goes out sealed, with no m:')
+            if not (len(dm) == 1 and ' x:' in dm[0]): print('    dm:', [w[:90] for w in dm])
             if dm:
                 x = dm[0].split(' x:')[1].split(' ')[0]
                 back = await ev(f"openBody(n2b(7n,32),pubkeyX(priv),{json.dumps(x)})")

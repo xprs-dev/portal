@@ -620,6 +620,12 @@ class H(BaseHTTPRequestHandler):
                               'type': r.get('type', 'message'), 'sig': 'verified',
                               'own': False, 'wire': r['wire']})
             return self._send(200, {'ok': True})
+        if path == '/__mailbox':
+            # A declaration this station learned from another archiver
+            # (XPRS.md 12.9.5): {"call": ..., "hold": [...]}.
+            r = json.loads(body)
+            MAILBOX[r['call'].split('-')[0].upper()] = [c.upper() for c in r['hold']]
+            return self._send(200, {'ok': True})
         if path == '/__rows':
             ROWS.extend(json.loads(body))
             return self._send(200, {'ok': True})
