@@ -113,7 +113,7 @@ try:
       .forEach(function(r){fetch('/__row',{method:'POST',body:JSON.stringify(r)});});})()""")
     time.sleep(.5)
     E("mapAskedAt=0;openView('map')")
-    ok = c.wait("/mapped/.test((el('mapcount')||{}).textContent||'')&&!!document.querySelector('.leaflet-container')", 30)
+    ok = c.wait("!!mapByCall('X1MAPA')&&!!mapByCall('X1MAPB')&&!!document.querySelector('.leaflet-container')", 30)
     check(ok, 'the Map view draws: ' + E("(el('mapcount')||{}).textContent"))
     check(E("document.querySelectorAll('.mapcnt').length") >= 1, 'a station hiding its digits shares a square marker')
     check(E("!!document.querySelector('#maplist [onclick*=X1MAPA]')"), 'a station with a key has Message')

@@ -378,6 +378,10 @@ class H(BaseHTTPRequestHandler):
                     head = r['wire'].split(' m:')[0] + ' '
                     return r.get('id') == root or (' r:%s ' % root) in head or (' root:%s ' % root) in head
                 rows = [r for r in rows if names(r)][::-1]
+            # `until` (epoch seconds, API-HTTP.md): the page before it, newest first.
+            until = (q.get('until') or [''])[0]
+            if until.isdigit():
+                rows = sorted([r for r in rows if r.get('ts', 0) <= int(until)], key=lambda r: -r.get('ts', 0))
             rows = rows[:int((q.get('limit') or ['30'])[0])]
             self._send(200, {'ok': True, 'count': len(rows), 'held': len(ROWS),
                              'time': 'synced', 'rows': rows,
@@ -569,6 +573,9 @@ class H(BaseHTTPRequestHandler):
                               'from': r['from'], 'to': r.get('to', ''),
                               'type': r.get('type', 'message'), 'sig': 'verified',
                               'own': False, 'wire': r['wire']})
+            return self._send(200, {'ok': True})
+        if path == '/__rows':
+            ROWS.extend(json.loads(body))
             return self._send(200, {'ok': True})
         if path == '/__row':
             ROWS.append(json.loads(body))

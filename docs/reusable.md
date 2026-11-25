@@ -16,6 +16,13 @@
   (xprs.dev's `window.XPRS_REMOTE`), a session on another station, a wire
   posted there with our identity first, and a loop over this account's
   archivers. Anything that must reach every archiver (mail, receipts) uses them.
+- **Finding stations (`mapFilter`, `mapMatch`, `mapChips`, `mapTagsOf`)**:
+  search, an area and filters built from what stations announce in
+  `t:service` (`serve:`, `source:`), freshest first, 50 at a time. A new
+  criterion is a new tag from the same announcement, not new code.
+- **`mapMerge(rows)` / `mapBack(page, n)` / `mapLookup(call)`**: the map's rows
+  as one newest-first set, older pages read with history's `until`, and a
+  callsign asked for by name.
 - **`mapPos(p)` / `mapStations(rows)`**: `pos:` as XPRS.md 15.1 reads it
   (redaction bars: the middle of the square, with `box` and `range`), and
   history rows folded into one entry per station (place, key, nick,
