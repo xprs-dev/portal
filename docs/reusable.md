@@ -212,3 +212,9 @@ through the page itself (headless Chromium), signing with a given signer
 - **Held answers in `test/look_smoke.py`**: `getJSON` wrapped in the page so
   every answer waits for `release()`. A slow link made exact, for testing
   what the page shows between asking and being answered.
+- **`posBarred(lat, lon, rangeM)` with `mapPos(pos)`**: a place written as
+  a station airs it (XPRS.md 6.2.1, the core's `xprsPosAuthored`): the
+  digits past the range barred, `49█████,8█████` at 100 km; `mapPos` reads
+  it back to the middle of its square. `test/place_test.js` holds both to
+  the core's worked values. Anything in the page that shows or previews a
+  station's place uses these, never a rounding of its own.

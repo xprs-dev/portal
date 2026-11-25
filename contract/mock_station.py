@@ -164,7 +164,25 @@ def forum_topics(room):
 ADMIN = {'call': None}
 SETTINGS = {'local_private': True, 'who_may_post': 'everyone', 'who_may_alert': 'moderators',
             'reach_alerts': 'regional', 'reach_posts': 'regional', 'reach_chat': 'global',
-            'follow': '', 'peers_mode': 'open', 'peers': '', 'pos': '', 'acc': 0}
+            'follow': '', 'peers_mode': 'open', 'peers': '',
+            # Where the station is: the app's own choice (XprsSharedPosition),
+            # nothing shared until the administrator says (pos_chosen).
+            'pos_share': False, 'pos_chosen': False, 'pos_at': '', 'pos_range': 100000}
+
+
+def place_aired():
+    """page.place: what the station airs (XPRS.md 6.2.1), as the core's
+    xprsPosAuthored writes it: the digits past the range barred."""
+    if not SETTINGS['pos_share'] or ',' not in SETTINGS['pos_at']:
+        return None
+    m = SETTINGS['pos_range']
+    keep = 4 if m <= 10 else 3 if m <= 100 else 2 if m <= 1000 else 1 if m <= 10000 else 0
+    def cut(v):
+        t = '%.4f' % v
+        at = t.index('.') + 1 + keep if keep else t.index('.')
+        return t[:at] + '\u2588' * (len(t) - at)
+    lat, lon = (float(x) for x in SETTINGS['pos_at'].split(','))
+    return {'pos': cut(lat) + ',' + cut(lon), 'acc': m}
 LOCAL = not os.environ.get('MOCK_REMOTE')
 
 
@@ -300,6 +318,8 @@ class H(BaseHTTPRequestHandler):
             if 'page' in sv:   # what the administrator set, as the station reports it
                 sv['page'] = dict(sv['page'], alerts=SETTINGS['who_may_alert'],
                                   **{k[5:]: v for k, v in SETTINGS.items() if k.startswith('page_')})
+                if place_aired():
+                    sv['page']['place'] = place_aired()
             self._send(200, sv)
         elif u.path == '/api/session':
             self._send(200, {'ok': True, 'nonce': NONCE})
@@ -492,12 +512,18 @@ class H(BaseHTTPRequestHandler):
                         # The same shapes the station checks (API-HTTP.md).
                         if k.startswith('reach_') and v not in ('local', 'regional', 'global'):
                             return self._send(400, {'ok': False, 'error': '%s must be local, regional or global' % k})
-                        if k == 'pos' and not (v == '' or (isinstance(v, str) and re.match(
+                        if k in ('pos', 'acc', 'pos_chosen'):
+                            return self._send(400, {'ok': False, 'error': 'unknown setting %s' % k})
+                        if k == 'pos_share':
+                            if not isinstance(v, bool):
+                                return self._send(400, {'ok': False, 'error': 'pos_share must be true or false'})
+                            SETTINGS['pos_chosen'] = True
+                        if k == 'pos_at' and not (v == '' or (isinstance(v, str) and re.match(
                                 r'^-?\d{1,3}(\.\d{1,5})?,-?\d{1,3}(\.\d{1,5})?$', v)
                                 and abs(float(v.split(',')[0])) <= 90 and abs(float(v.split(',')[1])) <= 180)):
-                            return self._send(400, {'ok': False, 'error': 'pos is "lat,lon" in degrees, at most 5 decimals'})
-                        if k == 'acc' and not (isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 3000000):
-                            return self._send(400, {'ok': False, 'error': 'acc is metres, 0 to 3000000'})
+                            return self._send(400, {'ok': False, 'error': 'pos_at is "lat,lon" in degrees, at most 5 decimals'})
+                        if k == 'pos_range' and v not in (100000, 10000, 1000, 100, 10):
+                            return self._send(400, {'ok': False, 'error': 'pos_range is one of 100000, 10000, 1000, 100, 10 metres'})
                         if k == 'peers_mode' and v not in ('open', 'named'):
                             return self._send(400, {'ok': False, 'error': 'peers_mode must be open or named'})
                         if k in ('peers', 'follow'):
