@@ -207,7 +207,8 @@ def admin_state(token):
     you = call is not None and call == ADMIN['call']
     st = {'ok': True, 'admin': ADMIN['call'], 'you': you, 'local': LOCAL,
           'claimable': ADMIN['call'] is None and LOCAL,
-          'station': 'X3MOCK', 'role': ROLES.get(call, 'none')}
+          'station': 'X3MOCK', 'role': ROLES.get(call, 'none'),
+          'public_moderators': [x for x in os.environ.get('MOCK_PUBLIC_MODS', '').split(',') if x]}
     if st['role'] == 'invited':
         st['offer'] = OFFER
     if you:

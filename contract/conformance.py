@@ -15,10 +15,18 @@ What it checks: /api/services names the station and what the page may
 offer; a session is a signed nonce, and only the right key gets one; the
 administrator is claimed once, from the network; settings; moderators are
 appointed, accept with their own signature, remove messages and send people
-away, and the station enforces that on history and send; hosted rooms are
+away, and the station enforces that on history and send; the public rooms'
+moderators (XPRS.md 10.10.3) are reported, and only a listed key removes a
+message there; hosted rooms are
 created, listed by visibility, joined by acceptance, posted to and filed;
 alerts are gated by the setting; files by reference, where the station
 says it keeps them, are stored only under their own hash and served back.
+
+The public rooms' moderators are published at xprs.dev, so the suite cannot
+appoint one. Give it a key the station under test lists (a bench station is
+handed a list holding it) and it checks the removal as well:
+
+    XPRS_PUBLIC_MOD_KEY=<64 hex> python3 contract/conformance.py <station>
 """
 import base64
 import hashlib
@@ -297,6 +305,48 @@ def main():
     st, d = alice.admin('dismiss', call=bob.call)
     check(st == 200 and bob.call not in d.get('moderators', []), 'bob is dismissed', d)
     check(bob.send('t:moderate f:%s d:%s ts:%s r:%s remove:message' % (bob.call, station, ts(), spam_id))[0] == 403, 'and cannot act any more')
+
+    print("the public rooms' moderators (10.10.3)")
+    pm = alice.state().get('public_moderators')
+    check(isinstance(pm, list) and all(isinstance(x, str) and x.startswith('npub1') for x in pm),
+          'the station says whose removals it honours there, as npubs', pm)
+    talk = sign(carol.priv, 't:message f:%s ts:%s scope:regional m:conformance public %d' % (carol.call, ts(), seed))
+    st, d = http('POST', '/api/xprs/send', {'wire': talk})
+    check(st == 200, 'a message in the Regional room is taken', d)
+    talk_id = d.get('id') or wire_id(talk)
+    check(carol.send('t:moderate f:%s ts:%s r:%s remove:message' % (carol.call, ts(), talk_id))[0] == 403,
+          'a key that is not listed cannot remove it')
+    check(alice.send('t:moderate f:%s ts:%s r:%s remove:message' % (alice.call, ts(), talk_id))[0] == 403,
+          "nor can the station's own administrator: the list is the only authority")
+    listed_key = os.environ.get('XPRS_PUBLIC_MOD_KEY', '')
+    if listed_key:
+        dave = Person(listed_key)
+        check(dave.npub in (pm or []), 'the key given to the suite is listed', pm)
+        for _ in range(30):
+            rows = carol.history(kind='message', limit='50').get('rows', [])
+            if any('conformance public %d' % seed in r.get('wire', '') for r in rows):
+                break
+            time.sleep(1)
+        check(any('conformance public %d' % seed in r.get('wire', '') for r in rows), 'the message is served in history')
+        help_id = carol.send('t:sos f:%s ts:%s m:conformance help %d' % (carol.call, ts(), seed))[1].get('id', '')
+        st, d = dave.send('t:moderate f:%s ts:%s r:%s remove:message' % (dave.call, ts(), talk_id))
+        check(st == 200, 'a listed key removes it, with no session and no role here', d)
+        h = carol.history(kind='message', limit='50')
+        check(not any('conformance public %d' % seed in r.get('wire', '') for r in h.get('rows', [])), 'it is gone from history')
+        check(talk_id in (h.get('moderation') or {}).get('removed', []), 'and listed under moderation.removed', h.get('moderation'))
+        if help_id:
+            dave.send('t:moderate f:%s ts:%s r:%s remove:message' % (dave.call, ts(), help_id))
+            for _ in range(30):
+                hs = carol.history(kind='sos', limit='50')
+                if any('conformance help %d' % seed in r.get('wire', '') for r in hs.get('rows', [])):
+                    break
+                time.sleep(1)
+            check(any('conformance help %d' % seed in r.get('wire', '') for r in hs.get('rows', [])),
+                  'a call for help is out of reach of it')
+        check(dave.send('t:moderate f:%s d:%s ts:%s revoke:%s' % (dave.call, station, ts(), carol.call))[0] == 403,
+              'removal only: a listed key sends nobody away')
+    else:
+        print('  (no XPRS_PUBLIC_MOD_KEY: the removal by a listed key is not checked)')
 
     print('hosted rooms')
     check(bob.rooms('create', name='Block C')[0] == 403, 'only the administrator creates a room')
