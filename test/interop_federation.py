@@ -24,6 +24,11 @@ their own, signing with the page's crypto as a browser does.
 Usage:
     python3 test/interop_federation.py --server ../server/build/xprs-server-linux-arm64
         [--keep] [--dir D] [--wait SECONDS] [--only rooms,who,mail,files,moderator]
+        [--live http://127.0.0.1 [--live-hub 127.0.0.1:4242]]
+
+With --live the station already running on this machine is A, the one the
+other two dial: the real archiver takes part, with everything it is
+connected to. The run then withdraws what it said in the public room.
 
 The stations run with --no-lan and no public hub: nothing on the machine's
 real network is heard or reached. --keep leaves folders and logs behind.
@@ -146,7 +151,7 @@ def seed_settings(root, name):
                    'xprs.publicMods.asked': int(time.time() * 1000)}, f)
 
 
-def start(binary, root, name, hub_port):
+def start(binary, root, name, hub_port, hub_host='127.0.0.1'):
     """One station, its settings seeded before it starts."""
     http_port, rns_port = PORTS[name]
     s = ia.Station.__new__(ia.Station)
@@ -162,7 +167,7 @@ def start(binary, root, name, hub_port):
     s.proc = subprocess.Popen(
         [binary, 'run', '--config', cfg, '--data-dir', s.dir,
          '--http-address', '127.0.0.1', '--http-port', str(http_port),
-         '--rns-port', str(rns_port), '--hub', '127.0.0.1:%d' % hub_port,
+         '--rns-port', str(rns_port), '--hub', '%s:%d' % (hub_host, hub_port),
          '--nickname', 'fed-' + name, '--no-public-name', '--no-upnp', '--no-lan',
          '--auto-update', 'off', '--log-file', s.log],
         cwd=root, stdout=s.out, stderr=subprocess.STDOUT)
@@ -171,7 +176,43 @@ def start(binary, root, name, hub_port):
     return s
 
 
+class Live:
+    """A station that is already running (the one installed on this machine):
+    reached by its API, never started or stopped here. Its log is the
+    service's journal."""
+
+    def __init__(self, base, unit):
+        self.base, self.unit, self.name, self.call = base.rstrip('/'), unit, 'a', ''
+        self.since = time.strftime('%Y-%m-%d %H:%M:%S')
+
+    def wait_up(self, seconds=20):
+        st, d = get_json(self.base + '/api/services')
+        self.call = d.get('station', '') if st == 200 else ''
+        return bool(self.call)
+
+    def logged(self, text):
+        try:
+            out = subprocess.run(['journalctl', '-u', self.unit, '--since', self.since, '--no-pager'],
+                                 capture_output=True, text=True, timeout=30).stdout
+        except Exception:
+            return []
+        return [line for line in out.splitlines() if text in line]
+
+    def stop(self):
+        pass
+
+
 # ---- the scenarios ---------------------------------------------------------
+
+said = []      # (who, identifier) of what was said in a public room, to withdraw
+
+
+def wire_id_of(s, text):
+    for r in history(s, limit='200'):
+        if text in r.get('wire', ''):
+            return r.get('id') or wire_id(r['wire'])
+    return ''
+
 
 def rooms(a, b, c, people, wait, seed):
     ana, bea, cat = people['ana'], people['bea'], people['cat']
@@ -204,6 +245,12 @@ def rooms(a, b, c, people, wait, seed):
     st, d = cat.send('t:message f:%s ts:%s scope:global m:%s' % (cat.call, ts(), g2))
     check(st == 200 and until(lambda: has(b, g2, room='global'), wait),
           'what cat says in Global at C is read at B (%s)' % took(t0))
+    g3 = 'fed global from a %d' % seed
+    t0 = time.time()
+    st, d = ana.send('t:message f:%s ts:%s scope:global m:%s' % (ana.call, ts(), g3))
+    check(st == 200 and until(lambda: has(b, g3, room='global') and has(c, g3, room='global'), wait),
+          'what ana says in Global at A is read at B and C (%s)' % took(t0))
+    said.extend([(bea, gid), (cat, wire_id_of(c, g2)), (ana, d.get('id', ''))])
     return gid, g
 
 
@@ -245,6 +292,25 @@ def mail(a, b, c, people, wait, seed):
         released = lambda s: bool(s.logged('receipt from %s released' % cat.call))
         check(until(lambda: released(c), 30), 'which releases the copy C held')
         check(until(lambda: released(b), wait), 'and the copy B held, where it was written (%s)' % took(t0))
+
+
+def mail_with_a(a, b, c, people, wait, seed):
+    """The same, with the station everybody dials as one end."""
+    ana, bea = people['ana'], people['bea']
+    st = ana.prove()
+    check(st == 200, 'ana has a session at A', st)
+    if ana.reply.get('holders') == []:
+        st, d = ana.send('t:mailbox f:%s ts:%s hold:%s until:%s' % (ana.call, ts(), a.call, ts(86400)))
+        check(st == 200, 'ana declares A her mailbox', d)
+    for who, to, at, note in ((bea, ana, 'A', 'fed mail to a %d' % seed), (ana, bea, 'B', 'fed mail from a %d' % seed)):
+        t0 = time.time()
+        st, d = who.send('t:message f:%s d:%s ts:%s m:%s' % (who.call, to.call, ts(), note))
+        check(st == 200, '%s writes to %s' % (who.name, to.name), d)
+        to.prove()
+        in_box = lambda: any(note in r.get('wire', '') for r in to.mail()[1].get('rows', []))
+        check(until(in_box, wait), '%s finds it in her mailbox at %s (%s)' % (to.name, at, took(t0)))
+        if d.get('id'):
+            to.send('t:receipt f:%s d:%s ts:%s r:%s s:ack' % (to.call, who.call, ts(), d['id']))
 
 
 def files(a, b, c, wait):
@@ -305,6 +371,9 @@ def main():
     ap.add_argument('--keep', action='store_true', help='leave the folders and logs')
     ap.add_argument('--wait', type=int, default=240, help='how long one crossing may take')
     ap.add_argument('--only', default='rooms,who,mail,files,moderator')
+    ap.add_argument('--live', help='use this running station as A (its API, e.g. http://127.0.0.1)')
+    ap.add_argument('--live-hub', default='127.0.0.1:4242', help='where B and C dial it')
+    ap.add_argument('--live-unit', default='xprs-server', help='its systemd unit, for its log')
     args = ap.parse_args()
     only = set(args.only.split(','))
     binary = os.path.abspath(args.server)
@@ -313,17 +382,34 @@ def main():
         shutil.rmtree(root, ignore_errors=True)
         os.makedirs(root)
     seed = int(time.time()) % 100000
-    a = start(binary, root, 'a', DEAD_PORT)
-    b = start(binary, root, 'b', PORTS['a'][1])
-    c = start(binary, root, 'c', PORTS['a'][1])
+    if args.live:
+        # The real station takes part. What is said in its Global room is
+        # read by real people, so the run says little, withdraws it at the
+        # end, and leaves the moderator out (the key this test lists is not
+        # one the real station believes).
+        only.discard('moderator')
+        a = Live(args.live, args.live_unit)
+        host, port = args.live_hub.rsplit(':', 1)
+        b = start(binary, root, 'b', int(port), hub_host=host)
+        c = start(binary, root, 'c', int(port), hub_host=host)
+    else:
+        a = start(binary, root, 'a', DEAD_PORT)
+        b = start(binary, root, 'b', PORTS['a'][1])
+        c = start(binary, root, 'c', PORTS['a'][1])
     ss = (a, b, c)
     try:
         if not all(check(s.wait_up(), 'station %s is up' % s.name.upper()) for s in ss):
             return 1
         print('A is %s, B is %s, C is %s; folders in %s' % (a.call, b.call, c.call, root))
-        met = lambda: all(x.logged('RNS: learned ' + y.call) for x in ss for y in ss if x is not y)
-        check(until(met, 180), 'each has learned the other two over Reticulum',
-              [(x.name, y.name) for x in ss for y in ss if x is not y and not x.logged('RNS: learned ' + y.call)])
+        if args.live:
+            # B and C meet through the real station and whatever it is
+            # joined to; that they can reach each other is what the
+            # scenarios below show. Time for the announces to cross.
+            time.sleep(45)
+        else:
+            met = lambda: all(x.logged('RNS: learned ' + y.call) for x in ss for y in ss if x is not y)
+            check(until(met, 180), 'each has learned the other two over Reticulum',
+                  [(x.name, y.name) for x in ss for y in ss if x is not y and not x.logged('RNS: learned ' + y.call)])
         people = {
             'ana': Person('ana', '11' * 31 + '%02x' % (seed % 250 + 1), a),
             'bea': Person('bea', '22' * 31 + '%02x' % (seed % 250 + 2), b),
@@ -341,6 +427,9 @@ def main():
         if 'mail' in only:
             print('mail from a person at B to a person at C')
             mail(a, b, c, people, args.wait, seed)
+        if 'mail' in only and args.live:
+            print('mail to and from a person at A')
+            mail_with_a(a, b, c, people, args.wait, seed)
         if 'files' in only:
             print('files by their hash')
             files(a, b, c, args.wait)
@@ -348,6 +437,12 @@ def main():
             print('the public rooms\' moderator')
             moderator(a, b, c, people, args.wait, seed, gid, text)
     finally:
+        if args.live:
+            # Its author takes back what the run said in the public room.
+            for author, mid in said:
+                if mid:
+                    author.send('t:message f:%s ts:%s scope:global r:%s remove:message' % (author.call, ts(), mid))
+            time.sleep(8)
         for s in ss:
             r = jget(s.base + '/api/xprs/archiver')
             f = jget(s.base + '/api/xprs/files')
