@@ -1,6 +1,10 @@
 # Plan: the portal as an app on the phone, and likes on posts
 
-Status 2026-11-27: **a plan, not started.**
+Status 2026-11-27: **steps 1, 2a, 3 and 4 are built** (and of 5, the
+gateways remembered on the device); 2b (`wait=`), the rest of 5 (gateways
+learned from the network) and 6 (the single file) are not. The section
+"What was built, and what it measured" at the end says how it differs from
+the plan below, which is kept as written.
 
 ## Where we are
 
@@ -246,3 +250,54 @@ after 5 it no longer depends on xprs.dev or on any one server.
   Screen the app opens standalone and still has its key.
 - The existing smoke tests still pass on the station page (the boards' copy
   must not change behaviour except fewer re-reads).
+
+## What was built, and what it measured (2026-11-27)
+
+Measured with `test/app_bench.py`: headless Chromium on
+`/in/x3ptzm`, the site served from this machine, the station reached
+through `wss://x3ptzm.xprs.dev/rns`, the bytes of the WebSocket counted.
+
+| | before | now |
+|---|---|---|
+| code fetched from xprs.dev at a start | about 320 KB gzipped, every start | nothing (the worker); a few hundred bytes once a day to ask for an update |
+| first open, over the link | about 560 KB | about 560 KB (230 KB of it map tiles) |
+| second open, over the link | about 330 KB (the map's tiles were kept already) | 35 to 55 KB |
+| open and idle, the page's own asks | about 12 MB an hour, and 4.6 MB more for the map (reckoned from the size of each ask and how often it was made) | about 100 KB an hour (measured) |
+| the site unreachable | nothing opens | the app opens and reaches the station |
+
+Where it differs from the plan:
+
+- **Thrifty only over a link.** On a station's own network every listing
+  is read whole, as before. `since=` is by the author's timestamp, and the
+  firmware leaves a packet with no timestamp out of a `since=` answer
+  (`xprsindex.c`): next to a board, where clockless boards talk, reading
+  whole is what shows every message, and the bytes cross one room.
+  `?thrifty=1` turns it on over HTTP.
+- **`since=` is the time of the last ask less five minutes**, not the
+  newest row held: a quiet listing is then not sent its newest row at every
+  ask. The whole window is read again every half hour (a day for the map's
+  stations, which only grow).
+- **The clocks.** Over a link the conversation is asked every 20 s, every
+  60 s after three asks with nothing new, every 2 min on a hidden page (so
+  a new message still counts in the title). Alerts and the blog every
+  10 min, the map every 15.
+- **Rows are kept per listing**, one IndexedDB record per station and
+  listing (`feedRead`), not per packet: simpler, and a listing is at most a
+  few hundred rows.
+- **The map's older pages** (`mapBack`, a megabyte on a busy archiver) are
+  not read over a link; the stations seen accumulate from visit to visit.
+- **Private files are not kept on the device** (the station says
+  `Cache-Control: private`); they stay in memory for the visit.
+- **Updates**: every fetched file is checked against its SHA-256 in
+  `version.json` before anything is replaced.
+
+Found while measuring, not fixed here (they are station-side):
+
+- **The gateway pushes announces to the browser**: about 20 a minute,
+  300 KB an hour, three times the page's own traffic when idle.
+  `RnsTransport.sendAnnounce` (reticulum-dart) sends to every interface
+  that is not an uplink and does not skip a quiet one, as `sendOnAll` and
+  `_rebroadcast` do. API-HTTP.md says a browser "receives no announce
+  flood".
+- **`wait=`** (step 2b) would take the remaining asks away.
+- **One gateway** is still all `in/gateways.json` lists.

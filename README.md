@@ -45,6 +45,37 @@ downloaded, and shows a "Get the app" link. `session: true` says the station
 gives a visitor who proves their key their own direct messages (below). A station with no `page` (the
 boards, today) shows everything and no link, exactly as before.
 
+## Over a link: thrifty, kept, installed
+
+Reached from xprs.dev/in (`window.XPRS_REMOTE`, the page carried over a
+Reticulum link) every byte is somebody's uplink or radio, so the page is
+thrifty there (`THRIFTY`; `?thrifty=1` turns it on anywhere):
+
+- a listing read once stays in the browser (IndexedDB `xprs-keep`) and is
+  drawn from there at the next visit, before the station answered;
+- a repeated read asks `since=` the last ask, with five minutes of overlap,
+  and the whole window again every half hour (`feedRead`);
+- the conversation is asked every 20 s, every minute once it is quiet, every
+  two minutes on a page nobody is looking at; the other feeds every 10 to 15
+  minutes;
+- a person's key is kept once it derives to their callsign.
+
+On a station's own network nothing of this applies: every listing is read
+whole, as it always was (a board leaves a packet without a timestamp out of
+a `since=` answer).
+
+xprs.dev/in installs as an app (the menu's "Install as an app", offered by
+the shell through `XPRS_REMOTE.install`): `xprs-dev.github.io/in/sw.js` keeps
+the page, Reticulum and the map's libraries on the device, so a start
+fetches nothing from xprs.dev, and files read from a station are kept by
+their reference. `docs/plan-installable-app.md` has the plan and what was
+measured. `test/thrift_smoke.py`, `test/shell_smoke.py` (the real shell and
+worker, Reticulum stood in for) and `test/app_bench.py` (a live station,
+bytes counted) check it.
+
+Every post can be liked (XPRS.md 7.5): a heart on a message's bubble, on a
+blog post and on a forum topic and its comments (`test/likes_smoke.py`).
+
 ## The rooms' archive, and Traffic
 
 The page asks each room's archive once, a room at a time

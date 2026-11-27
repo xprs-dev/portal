@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SENT = []
+ASKS = []        # every history ask: its since= and how many rows it got
 ARCHIVE_DELAY = 0      # seconds a sent row waits before history shows it
 FILES = {}             # sha256 hex -> (bytes, content type)
 FILE_MAX = 2 * 1024 * 1024
@@ -410,6 +411,13 @@ class H(BaseHTTPRequestHandler):
                     head = r['wire'].split(' m:')[0] + ' '
                     return r.get('id') == root or (' r:%s ' % root) in head or (' root:%s ' % root) in head
                 rows = [r for r in rows if names(r)][::-1]
+            # `since` (epoch seconds, API-HTTP.md): only what is as new, by the
+            # author's own time; a packet that carries none is not in it.
+            since = (q.get('since') or [''])[0]
+            if since.isdigit():
+                rows = [r for r in rows if r.get('ts', 0) >= int(since)]
+            ASKS.append({'since': since, 'rows': min(len(rows), int((q.get('limit') or ['30'])[0])),
+                         'q': u.query})
             # `until` (epoch seconds, API-HTTP.md): the page before it, newest first.
             until = (q.get('until') or [''])[0]
             if until.isdigit():
@@ -435,6 +443,9 @@ class H(BaseHTTPRequestHandler):
                                           'ETag': '"%s"' % sha})
         elif u.path == '/__sent':
             self._send(200, SENT)
+        elif u.path == '/__asks':
+            # What the page asked of the history, for the thrift tests.
+            self._send(200, ASKS)
         else:
             self._send(404, {'ok': False, 'error': 'not here'})
 
@@ -451,6 +462,13 @@ class H(BaseHTTPRequestHandler):
                                         'only its administrator changes its network'})
             WIFI_JOINS.append((f.get('ssid') or [''])[0])
             return self._send(200, {'ok': True, 'join': 'joining'})
+        if path == '/__row':
+            # A packet heard from elsewhere, for the tests: filed as given.
+            ROWS.append(json.loads(raw.decode()))
+            return self._send(200, {'ok': True})
+        if path == '/__asks_clear':
+            del ASKS[:]
+            return self._send(200, {'ok': True})
         if path == '/__wifi_joins':
             return self._send(200, WIFI_JOINS)
         if path.startswith('/api/xprs/file/'):
@@ -733,6 +751,14 @@ class H(BaseHTTPRequestHandler):
                 elif ' revoke:' in wire:
                     AWAY.append(wire.split(' revoke:')[1].split(' ')[0])
             SENT.append(wire)
+            if wire.startswith('t:reaction ') and ' d:' not in wire:
+                # A like of something said to everybody (XPRS.md 7.5): filed
+                # as heard, so the next reader counts it.
+                f = wire.split(' f:')[1].split(' ')[0]
+                ROWS.append({'id': 'l%05x' % len(SENT), 'ts': int(time.time()), 'bearer': 'web',
+                             'rssi': 0, 'from': f, 'to': '', 'type': 'reaction',
+                             'sig': 'verified', 'own': False, 'wire': wire})
+                return self._send(200, {'ok': True, 'id': 'l%05x' % len(SENT), 'wire': wire})
             # A message to one callsign is mail (XPRS.md 12.1): held for its
             # two parties, read only through a session proving one of them.
             head = wire.split(' m:')[0]

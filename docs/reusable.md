@@ -244,3 +244,36 @@ through the page itself (headless Chromium), signing with a given signer
   **`mapKind(s)` / `mapShows(s)`**: archiver (`serve:archive`, any machine),
   person (`X1`) or other station, and whether the filter over the map shows
   it; the map and the Stations list both read it.
+- **`feedRead(name, url, limit, cb, opt)`** (with `feedPut`, `feedAnswer`,
+  `keepGet`/`keepPut`): a listing of `/api/xprs/history` read again and
+  again. On a station's own network it is `getJSON`, unchanged. Thrifty
+  (`THRIFTY`: over a Reticulum link, or `?thrifty=1`) the rows read stay in
+  IndexedDB (`xprs-keep`, one record per station and listing, the 120 used
+  last), are handed to `cb` at once at the next visit, and a repeated read
+  asks only `since=` the last ask (five minutes of overlap), the whole
+  window again every half hour. `opt`: `cap`, `ms`, `full`, `sess` (rows
+  depend on the session), `draw`, `grow` (never replace: stations seen).
+  ANY new listing the page polls goes through it, never a bare `getJSON`
+  on a clock. `every(ms)` is the period of a throttle, four times longer
+  when thrifty; `tabMs(t)` a tab's clock. `test/thrift_smoke.py`.
+- **`likeBtn(id)` / `sendLike(id)` / `applyReaction(row)` / `loadLikes(name, q)`**:
+  likes (XPRS.md 7.5) for anything with an identifier: `likeBtn` is the
+  heart of a card, a bubble's is `.likes`; `applyReaction` takes reaction
+  rows in any order (the newest word per callsign wins); `sendLike` signs
+  `add:like` or `remove:like`, with `d:` when the post lives in a room.
+  A new kind of post gets its heart by calling `likeBtn(p.id)` and
+  `loadLikes`. `test/likes_smoke.py`.
+- **`keyKept(c)` / `keyKeep(c, k)`**: a person's key, kept in the browser
+  once it derives to the callsign asked for, so it is asked of no station
+  twice.
+- **`installOffer()` / `installApp()`**: the menu's "Install as an app",
+  shown when the shell that carries the page can install it
+  (`XPRS_REMOTE.install`: `state()` is `ask`, `ios`, `menu` or `no`).
+- **`test/cdp.py` `Cdp.watch` / `Cdp.events`**: protocol events kept for a
+  test (WebSocket frames, to count the bytes a page costs).
+  `test/app_bench.py` counts them against a live station;
+  `test/shell_smoke.py` runs the real shell and worker with Reticulum
+  stood in for (`FAKE_RNS`), for anything in `in/shell.js` or `in/sw.js`.
+- **`contract/mock_station.py`**: `since=` on the history, `/__asks` (what
+  was asked, with how many rows came back), `/__row` (a packet heard from
+  elsewhere).

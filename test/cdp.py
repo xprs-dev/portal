@@ -32,6 +32,8 @@ class Cdp:
         os.close(to_chrome_r)
         os.close(from_chrome_w)
         self.buf = b''
+        self.watch = set()
+        self.events = []
         self.n = 0
         self.session = None
 
@@ -49,6 +51,10 @@ class Cdp:
                 self.buf += chunk
             line, self.buf = self.buf.split(b'\0', 1)
             m = json.loads(line)
+            # An event (no id): kept for a test that asked for them (self.watch
+            # is the set of methods to keep, e.g. the WebSocket frames).
+            if 'id' not in m and m.get('method') in self.watch:
+                self.events.append(m)
             if m.get('id') == self.n:
                 if 'error' in m:
                     raise RuntimeError('%s: %s' % (method, m['error'].get('message')))
