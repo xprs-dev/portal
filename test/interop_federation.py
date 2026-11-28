@@ -421,6 +421,13 @@ def main():
         if 'rooms' in only or 'moderator' in only:
             print('rooms')
             gid, text = rooms(a, b, c, people, args.wait, seed)
+        # How each station could reach the other two right now.
+        for x in ss:
+            for y in ss:
+                if x is not y:
+                    ln = jget('%s/api/xprs/archiver?call=%s' % (x.base, y.call)).get('lanes') or {}
+                    print('  (%s to %s: %s)' % (x.name.upper(), y.name.upper(),
+                                                ', '.join(k for k, v in ln.items() if v) or 'no lane'))
         if 'who' in only or 'mail' in only:
             print('who is cared for where')
             who(a, b, c, people, args.wait)
