@@ -1711,6 +1711,17 @@ function showMsgMenu(ev,id,from,own){
     items+='<div class="modsep">Moderator</div>'+
       '<button onclick="menuAct(\'pdel\',\''+id+'\',\''+from+'\')">Delete for everyone</button>';
   }
+  /* An open group (10.10.4): a moderator of it deletes, and names or
+     dismisses another moderator. */
+  else if(!own&&ogModHere()){
+    var og=ogName();
+    items+='<div class="modsep">Moderator</div>'+
+      '<button onclick="menuAct(\'odel\',\''+id+'\',\''+from+'\')">Delete for everyone</button>';
+    if(!ogIsMod(og,from))
+      items+='<button onclick="menuAct(\'omod\',\''+id+'\',\''+from+'\')">Make '+from+' a moderator</button>';
+    else if(ogMayDismiss(og,from))
+      items+='<button onclick="menuAct(\'ounmod\',\''+id+'\',\''+from+'\')">Remove '+from+' as moderator</button>';
+  }
   m.innerHTML=items;
   m.style.display='block';
   var x=Math.min(ev.clientX,window.innerWidth-180);
@@ -1726,6 +1737,9 @@ function menuAct(act,id,from){
   else if(act==='dm')openDm(from);
   else if(act==='mdel')modDelete(id);
   else if(act==='pdel')pubDelete(id);
+  else if(act==='odel')ogDelete(id);
+  else if(act==='omod')ogAppoint(from);
+  else if(act==='ounmod')ogDismiss(from);
   else if(act==='mhide')modAct('r:'+id+' hide:message',function(){
     applyModeration({removed:[id],away:Object.keys(modAway)});snack('Hidden');});
   else if(act==='medit')modCorrect(id);
@@ -2014,6 +2028,7 @@ function loadGroup(){
       if(!sg.role&&mycall&&now-(info.askedAt||0)>60000){info.askedAt=now;groupActs(g,info);}
       drawGroupNote(g);
     }
+    if(d.moderation&&d.moderation.moderators)ogMods[g]=d.moderation.moderators;
     if(d.moderation)applyModeration({removed:d.moderation.removed||[],away:Object.keys(modAway),edits:d.moderation.edits});
     var rows=d.rows.slice().reverse();
     for(var i=0;i<rows.length;i++)render(rows[i]);
@@ -5272,6 +5287,78 @@ function loadPubMods(){
   getJSON('/api/admin',function(d){if(d&&d.public_moderators)pubMods=d.public_moderators;});}
 function pubModHere(){
   return !!npub&&pubMods.indexOf(npub)>=0&&canSign()&&(curRoom==='regional'||curRoom==='global');}
+/* ---- an open group's moderators (XPRS.md 10.10.4) ----
+   An open group is made by posting to its name and belongs to nobody. Its
+   moderators are the public rooms' (the published list) and whoever a
+   moderator of the group named; the station says who they are with the
+   group's history. A moderator deletes a message and names another
+   moderator; dismissing one takes everybody they named with them. The three
+   acts are signed here and judged by the station. */
+var ogMods={};
+function ogName(){
+  if(curRoom.slice(0,2)!=='o:')return '';
+  var g=curRoom.slice(2);
+  return /^X5[0-9A-Z]{4}$/.test(g)?'':g;}
+function ogListed(){return !!npub&&pubMods.indexOf(npub)>=0;}
+function ogBy(g,c){
+  var l=ogMods[g]||[];
+  for(var i=0;i<l.length;i++)if(l[i].call===c)return l[i].by||'';
+  return null;}
+function ogIsMod(g,c){return ogBy(g,c)!==null;}
+/* Is c of top's line: named by it, or by somebody it named? */
+function ogUnder(g,c,top){
+  var at=c;
+  for(var hop=0;hop<16;hop++){
+    var by=ogBy(g,at);
+    if(!by||by==='*')return false;
+    if(by===top)return true;
+    at=by;}
+  return false;}
+function ogMayDismiss(g,c){return ogListed()||ogUnder(g,c,mycall);}
+function ogModHere(){
+  var g=ogName();
+  return !!g&&canSign()&&(ogListed()||ogIsMod(g,mycall));}
+function ogAct(g,body,done){
+  signAny('t:moderate f:'+mycall+' d:'+g+' ts:'+tsNow()+' '+body,function(w){
+    if(!w)return snack('Not signed');
+    postWire(w,function(ok,why){
+      if(!ok)return snack(why||'The station refused it');
+      done();
+    });
+  });
+}
+function ogDelete(id){
+  var g=ogName();if(!g)return;
+  if(!confirm('Delete this message for everyone? This cannot be undone.'))return;
+  ogAct(g,'r:'+id+' remove:message',function(){
+    applyModeration({removed:[id],away:Object.keys(modAway)});
+    snack('Deleted');});
+}
+function ogAppoint(call){
+  var g=ogName();if(!g)return;
+  if(!confirm('Make '+call+' a moderator of #'+g+'? They can delete messages here and add other moderators.'))return;
+  ogAct(g,'grant:'+call+' role:mod',function(){
+    (ogMods[g]=ogMods[g]||[]).push({call:call,by:ogListed()?'*':mycall});
+    snack(call+' is now a moderator here');});
+}
+function ogDismiss(call){
+  var g=ogName();if(!g)return;
+  var l=ogMods[g]||[],line=[],i;
+  for(i=0;i<l.length;i++)if(l[i].call!==call&&ogUnder(g,l[i].call,call))line.push(l[i].call);
+  if(!confirm('Remove '+call+' as moderator of #'+g+'?'+
+      (line.length?' Everybody they named goes too ('+line.join(', ')+'), and gets a private message from you saying so.':'')))return;
+  ogAct(g,'revoke:'+call,function(){
+    ogMods[g]=l.filter(function(m){return m.call!==call&&line.indexOf(m.call)<0;});
+    /* Each of the line is written to: their role ended because of
+       somebody else's, and they may ask for it again. */
+    for(var k=0;k<line.length;k++)ogNote(line[k],g);
+    snack(call+' is no longer a moderator here');});
+}
+function ogNote(to,g){
+  signAny('t:message f:'+mycall+' d:'+to+' ts:'+tsNow()+' m:Your role as moderator of #'+g+
+    ' has ended, because the moderator who appointed you was dismissed. If you would like to be a moderator again, write to me.',
+    function(w){if(w)postWire(w,function(){});});
+}
 function pubDelete(id){
   if(!confirm('Delete this message for everyone? This cannot be undone.'))return;
   signAny('t:moderate f:'+mycall+' ts:'+tsNow()+' r:'+id+' remove:message',function(w){

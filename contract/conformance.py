@@ -17,7 +17,8 @@ administrator is claimed once, from the network; settings; moderators are
 appointed, accept with their own signature, remove messages and send people
 away, and the station enforces that on history and send; the public rooms'
 moderators (XPRS.md 10.10.3) are reported, and only a listed key removes a
-message there; hosted rooms are
+message there; an open group's moderators (10.10.4) are those and whoever a
+moderator of the group named, and a dismissal takes a line with it; hosted rooms are
 created, listed by visibility, joined by acceptance, posted to and filed;
 alerts are gated by the setting; files by reference, where the station
 says it keeps them, are stored only under their own hash and served back.
@@ -368,6 +369,48 @@ def main():
               'removal only: a listed key sends nobody away')
     else:
         print('  (no XPRS_PUBLIC_MOD_KEY: the removal by a listed key is not checked)')
+
+    print('an open group and its moderators (10.10.4)')
+    # Made by posting to it; its moderators are the public rooms' and whoever
+    # a moderator of the group named. Removal only; a dismissal takes the
+    # dismissed moderator's line with it.
+    og = 'CONF%d' % (seed % 100000)
+    said = sign(bob.priv, 't:message f:%s d:%s ts:%s m:conformance open %d' % (bob.call, og, ts(), seed))
+    st, d = http('POST', '/api/xprs/send', {'wire': said})
+    check(st == 200, 'anybody posts to an open group, and so makes it', d)
+    og_id = d.get('id') or wire_id(said)
+    check(carol.send('t:moderate f:%s d:%s ts:%s r:%s remove:message' % (carol.call, og, ts(), og_id))[0] == 403,
+          'somebody who is not a moderator of it removes nothing')
+    check(carol.send('t:moderate f:%s d:%s ts:%s grant:%s role:mod' % (carol.call, og, ts(), carol.call))[0] == 403,
+          'and appoints nobody, themselves included')
+    if listed_key:
+        dave = Person(listed_key)
+        st, d = dave.send('t:moderate f:%s d:%s ts:%s grant:%s role:mod' % (dave.call, og, ts(), carol.call))
+        check(st == 200, 'a moderator of the public rooms names carol a moderator of it', d)
+        time.sleep(1)
+        st, d = carol.send('t:moderate f:%s d:%s ts:%s grant:%s role:mod' % (carol.call, og, ts(), bob.call))
+        check(st == 200, 'carol, a moderator now, names bob', d)
+        hist = lambda: http('GET', '/api/xprs/history', query='room=%s&limit=50' % og)[1]
+        names = sorted(m.get('call') for m in (hist().get('moderation') or {}).get('moderators', []))
+        check(names == sorted([carol.call, bob.call]), 'the group\'s history says who its moderators are', names)
+        time.sleep(1)
+        st, d = bob.send('t:moderate f:%s d:%s ts:%s r:%s remove:message' % (bob.call, og, ts(), og_id))
+        check(st == 200, 'bob removes the message', d)
+        h = hist()
+        check(not any('conformance open %d' % seed in r.get('wire', '') for r in h.get('rows', [])), 'it is gone from the group')
+        check(og_id in (h.get('moderation') or {}).get('removed', []), 'and listed as removed')
+        check(bob.send('t:moderate f:%s d:%s ts:%s revoke:%s' % (bob.call, og, ts(), carol.call))[0] == 403,
+              'bob cannot dismiss carol, who named him')
+        time.sleep(1)
+        st, d = dave.send('t:moderate f:%s d:%s ts:%s revoke:%s' % (dave.call, og, ts(), carol.call))
+        check(st == 200, 'the public rooms\' moderator dismisses carol', d)
+        names = [m.get('call') for m in (hist().get('moderation') or {}).get('moderators', [])]
+        check(names == [], 'and bob, whom she named, goes with her', names)
+        time.sleep(1)
+        check(bob.send('t:moderate f:%s d:%s ts:%s r:aaaaaa remove:message' % (bob.call, og, ts()))[0] == 403,
+              'neither acts any more')
+    else:
+        print('  (no XPRS_PUBLIC_MOD_KEY: the appointments are not checked)')
 
     print('hosted rooms')
     check(bob.rooms('create', name='Block C')[0] == 403, 'only the administrator creates a room')
