@@ -250,8 +250,9 @@ through the page itself (headless Chromium), signing with a given signer
   (`THRIFTY`: over a Reticulum link, or `?thrifty=1`) the rows read stay in
   IndexedDB (`xprs-keep`, one record per station and listing, the 120 used
   last), are handed to `cb` at once at the next visit, and a repeated read
-  asks only `since=` the last ask (five minutes of overlap), the whole
-  window again every half hour. `opt`: `cap`, `ms`, `full`, `sess` (rows
+  asks only `since=` the last ask (five minutes of overlap) and `after=`
+  the station's `cursor` (API-HTTP.md: of those minutes, only what it filed
+  since its last answer), the whole window again every half hour. `opt`: `cap`, `ms`, `full`, `sess` (rows
   depend on the session), `draw`, `grow` (never replace: stations seen).
   ANY new listing the page polls goes through it, never a bare `getJSON`
   on a clock. `every(ms)` is the period of a throttle, four times longer
