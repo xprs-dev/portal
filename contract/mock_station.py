@@ -26,6 +26,12 @@ from urllib.parse import parse_qs, urlparse
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SENT = []
 ASKS = []        # every history ask: its since= and how many rows it got
+# `cursor` and `after` (API-HTTP.md): rows are numbered as they are filed, so
+# an ask can be answered with only what was filed since the last one.
+# MOCK_NO_CURSOR=1 is a station that knows neither.
+FILED = {}       # id(row) -> its number
+FILED_N = [0]
+CURSOR = os.environ.get('MOCK_NO_CURSOR') != '1'
 ARCHIVE_DELAY = 0      # seconds a sent row waits before history shows it
 FILES = {}             # sha256 hex -> (bytes, content type)
 FILE_MAX = 2 * 1024 * 1024
@@ -374,6 +380,11 @@ class H(BaseHTTPRequestHandler):
             q = parse_qs(u.query)
             kinds = (q.get('kind') or [''])[0].split(',')
             pool = [r for r in ROWS if r.get('_at', 0) <= time.time()]
+            for r in pool + ADDRESSED:
+                if id(r) not in FILED:
+                    FILED_N[0] += 1
+                    FILED[id(r)] = FILED_N[0]
+            mark = FILED_N[0]
             # Mail is its two parties' (XPRS.md 12.7): a session proving one
             # of them, or the administrator's, reads it; nobody else does.
             who = SESSIONS.get((q.get('session') or [''])[0])
@@ -416,6 +427,9 @@ class H(BaseHTTPRequestHandler):
             since = (q.get('since') or [''])[0]
             if since.isdigit():
                 rows = [r for r in rows if r.get('ts', 0) >= int(since)]
+            after = (q.get('after') or [''])[0]
+            if CURSOR and after.isdigit() and int(after) <= mark:
+                rows = [r for r in rows if FILED.get(id(r), 0) > int(after)]
             ASKS.append({'since': since, 'rows': min(len(rows), int((q.get('limit') or ['30'])[0])),
                          'q': u.query})
             # `until` (epoch seconds, API-HTTP.md): the page before it, newest first.
@@ -423,9 +437,12 @@ class H(BaseHTTPRequestHandler):
             if until.isdigit():
                 rows = sorted([r for r in rows if r.get('ts', 0) <= int(until)], key=lambda r: -r.get('ts', 0))
             rows = rows[:int((q.get('limit') or ['30'])[0])]
-            self._send(200, {'ok': True, 'count': len(rows), 'held': len(ROWS),
-                             'time': 'synced', 'rows': rows,
-                             'moderation': {'removed': REMOVED, 'away': AWAY}})
+            ans = {'ok': True, 'count': len(rows), 'held': len(ROWS),
+                   'time': 'synced', 'rows': rows,
+                   'moderation': {'removed': REMOVED, 'away': AWAY}}
+            if CURSOR:
+                ans['cursor'] = str(mark)
+            self._send(200, ans)
         elif u.path.startswith('/api/xprs/file/'):
             ref = u.path[len('/api/xprs/file/'):]
             sha = ref_sha(ref)

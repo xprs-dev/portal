@@ -216,6 +216,27 @@ def main():
     check(has(carol.history(kind='message', limit='50').get('rows', [])), 'carol, the recipient, reads it in her history')
     check(has(bob.history(kind='message', limit='50').get('rows', [])), 'bob, the sender, reads it in his')
     check(not has(http('GET', '/api/xprs/history', query='kind=message&limit=50')[1].get('rows', [])), 'without a session it is not served')
+    # cursor / after (API-HTTP.md): a station that hands out a mark says a
+    # packet once to whoever asks again with it.
+    h = carol.history(kind='message', limit='50')
+    if h.get('cursor'):
+        mark = h['cursor']
+        check(not carol.history(kind='message', limit='50', after=mark).get('rows'),
+              'asked again with after=<cursor>, nothing is said twice')
+        note2 = 'conformance filed since %d' % seed
+        bob.send('t:message f:%s d:%s ts:%s m:%s' % (bob.call, carol.call, ts(1), note2))
+        fresh = []
+        for _ in range(30):
+            fresh = carol.history(kind='message', limit='50', after=mark).get('rows', [])
+            if fresh:
+                break
+            time.sleep(1)
+        check(len(fresh) == 1 and note2 in fresh[0].get('wire', ''), 'what was filed since is served, and only that',
+              [r.get('wire') for r in fresh])
+        check(has(carol.history(kind='message', limit='50', after='no-such-mark').get('rows', [])),
+              'a mark the station cannot place is answered in full')
+    else:
+        print('  (no cursor in the listing: this station says rows by since= alone)')
     st, d = http('GET', '/api/xprs/mail', query='call=%s' % carol.call)
     check(st == 403, "nor is carol's mailbox, without her session", st)
     st, d = http('GET', '/api/xprs/mail', query='call=%s&session=%s' % (carol.call, bob.session))

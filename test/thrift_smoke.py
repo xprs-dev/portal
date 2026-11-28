@@ -6,7 +6,7 @@
   - on a station's own network nothing changed: the listing is read whole;
   - thrifty, a repeated read asks only for what is newer (since=) and gets
     no rows while nothing was said;
-  - a packet that arrives is drawn at the next ask;
+  - a packet that arrives is drawn at the next ask, and sent once (after=);
   - what was read stays in the browser: with the station's history blocked,
     a reload still draws the conversation and the blog;
   - a return visit asks by since= from its first ask: nothing read twice.
@@ -95,6 +95,15 @@ try:
     c.eval("tick()")
     check(c.wait("document.getElementById('msgs').textContent.indexOf('just arrived over the hill')>=0", 5),
           'a packet that arrives is drawn at the next ask')
+    # The station files it once and tells it once (cursor / after): the
+    # asks that follow reach back five minutes by since= and get nothing.
+    post('__asks_clear')
+    for _ in range(3):
+        c.eval("tick()")
+        time.sleep(0.6)
+    a = chat_asks()
+    check(len(a) == 3 and all('after=' in x['q'] for x in a) and sum(x['rows'] for x in a) == 0,
+          'and is not sent again at the asks that follow', a)
     check(c.eval("document.querySelectorAll('#msgs .msg').length") ==
           c.eval("(function(){var s={},n=0,m=document.querySelectorAll('#msgs .msg');"
                  "for(var i=0;i<m.length;i++){var k=m[i].getAttribute('data-id');if(!s[k]){s[k]=1;n++;}}return n;})()"),
