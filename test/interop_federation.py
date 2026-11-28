@@ -403,9 +403,16 @@ def main():
         print('A is %s, B is %s, C is %s; folders in %s' % (a.call, b.call, c.call, root))
         if args.live:
             # B and C meet through the real station and whatever it is
-            # joined to; that they can reach each other is what the
-            # scenarios below show. Time for the announces to cross.
-            time.sleep(45)
+            # joined to. On a real network that takes minutes, not seconds
+            # (announces are rationed): wait until every station has a lane
+            # to the other two, as two archivers that have been up a while
+            # do, and say how long it took.
+            def lanes(x, y):
+                ln = jget('%s/api/xprs/archiver?call=%s' % (x.base, y.call)).get('lanes') or {}
+                return ln.get('linePeer') or ln.get('lineLane') or ln.get('stationRoute') or ln.get('lxmfRoute')
+            t0 = time.time()
+            settled = until(lambda: all(lanes(x, y) for x in ss for y in ss if x is not y), 480, every=10)
+            check(settled, 'every station has a lane to the other two (%s)' % took(t0))
         else:
             met = lambda: all(x.logged('RNS: learned ' + y.call) for x in ss for y in ss if x is not y)
             check(until(met, 180), 'each has learned the other two over Reticulum',
